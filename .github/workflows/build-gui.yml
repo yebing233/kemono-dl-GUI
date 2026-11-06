@@ -46,7 +46,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Unit tests (GUI ↔ CLI mapping)
-        run: python -m unittest tests.test_gui_args -v
+        run: python -m unittest tests.test_gui_args tests.test_gui_streams tests.test_gui_server -v
 
       - name: Static UI check
         run: python tools/check_ui.py
@@ -64,6 +64,9 @@ jobs:
       - name: Verify the built exe (frozen mode, real process)
         run: python tools/verify_exe.py
 
+      - name: Deployment smoke test (0.0.0.0 + password + healthz)
+        run: python tools/docker_test.py
+        
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
