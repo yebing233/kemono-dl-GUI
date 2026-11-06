@@ -1,1 +1,79 @@
-D:\Users\yebing\Documents\deepseek-harness\default-workspace\kemono-dl-upload\.github\workflows\build-gui.yml
+name: Build GUI (portable exe)
+
+# Builds dist/kemono-dl-gui.exe on a real Windows runner, runs the unit tests,
+# then launches the *built* exe and talks to its HTTP API (tools/verify_exe.py).
+# That is the end-to-end proof that the portable build works on a machine whose
+# only input is the exe itself.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "kemono_dl_gui/**"
+      - "kemono_dl/**"
+      - "gui_main.py"
+      - "kemono-dl-gui.spec"
+      - "tools/**"
+      - "tests/**"
+      - ".github/workflows/build-gui.yml"
+  pull_request:
+    paths:
+      - "kemono_dl_gui/**"
+      - "gui_main.py"
+      - "kemono-dl-gui.spec"
+      - "tools/**"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Unit tests (GUI ↔ CLI mapping)
+        run: python -m unittest tests.test_gui_args -v
+
+      - name: Static UI check
+        run: python tools/check_ui.py
+
+      - name: Server smoke test (source mode)
+        run: python tools/smoke_test.py
+
+      - name: Build portable exe
+        # build_exe.py downloads the wheels itself (no pip needed for PyInstaller)
+        run: python tools/build_exe.py
+
+      - name: Inspect bundle (self-contained, no host Python)
+        run: python tools/check_exe_bundle.py
+
+      - name: Verify the built exe (frozen mode, real process)
+        run: python tools/verify_exe.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kemono-dl-gui-windows-x64
+          path: dist/kemono-dl-gui.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach exe to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/kemono-dl-gui.exe
