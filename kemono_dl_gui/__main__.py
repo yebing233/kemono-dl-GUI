@@ -14,23 +14,50 @@ import io
 import os
 import sys
 
+#: Streams replaced by :func:`_ensure_std_streams`; keeping them alive stops the
+#: garbage collector from closing fd 1/2 under the new wrapper.
+_KEEP_ALIVE: list[object] = []
 
-def _ensure_std_streams() -> None:
-    """Force UTF-8 on ``sys.stdout``/``sys.stderr`` (recreate them when missing).
+
+def _ensure_std_streams(unbuffered: bool = False) -> None:
+    """Force UTF-8 (and optionally unbuffered writes) on stdout/stderr.
 
     The packaged executable is a GUI (``console=False``) application and the
     PyInstaller bootloader starts the interpreter with ``use_environment = 0``,
-    so ``PYTHONUTF8`` / ``PYTHONIOENCODING`` inherited from the GUI are ignored.
-    CPython therefore builds ``sys.stdout`` from the pipe handed over by the GUI
-    with the *Windows ANSI code page* (GBK/cp936 on zh-CN systems), and printing
-    anything outside that code page — e.g. a Japanese post title containing
-    U+30FB — kills the download with ``UnicodeEncodeError``.
+    so ``PYTHONUTF8`` / ``PYTHONIOENCODING`` / ``PYTHONUNBUFFERED`` inherited from
+    the GUI are ignored.  CPython therefore builds ``sys.stdout`` from the pipe
+    handed over by the GUI with the *Windows ANSI code page* (GBK/cp936 on zh-CN
+    systems), and printing anything outside that code page — e.g. a Japanese post
+    title containing U+30FB — kills the download with ``UnicodeEncodeError``.
 
     Reconfiguring the existing stream (and falling back to wrapping fd 1/2) keeps
     the log pane lossless for every language.
+
+    ``unbuffered`` is used by the ``--run-cli`` child: its stdout stays *block*
+    buffered (8 KiB) in a frozen build, so download progress and log lines would
+    only reach the GUI in bursts.  Wrapping the raw fd with ``write_through``
+    makes every ``print`` land in the pipe immediately.
     """
     for name, fd in (("stdout", 1), ("stderr", 2)):
         stream = getattr(sys, name, None)
+        if unbuffered:
+            try:
+                os.fstat(fd)
+            except OSError:
+                if stream is None:
+                    setattr(sys, name, io.StringIO())
+                continue
+            replacement = io.TextIOWrapper(
+                io.FileIO(fd, "w", closefd=False),
+                encoding="utf-8",
+                errors="replace",
+                write_through=True,
+                line_buffering=False,
+            )
+            if stream is not None:
+                _KEEP_ALIVE.append(stream)
+            setattr(sys, name, replacement)
+            continue
         if stream is not None:
             reconfigure = getattr(stream, "reconfigure", None)
             if reconfigure is not None:
@@ -44,17 +71,16 @@ def _ensure_std_streams() -> None:
         except OSError:
             setattr(sys, name, io.StringIO())
         else:
-            setattr(
-                sys,
-                name,
-                io.TextIOWrapper(
-                    io.FileIO(fd, "w", closefd=False),
-                    encoding="utf-8",
-                    errors="replace",
-                    write_through=True,
-                    line_buffering=True,
-                ),
+            replacement = io.TextIOWrapper(
+                io.FileIO(fd, "w", closefd=False),
+                encoding="utf-8",
+                errors="replace",
+                write_through=True,
+                line_buffering=True,
             )
+            if stream is not None:
+                _KEEP_ALIVE.append(stream)
+            setattr(sys, name, replacement)
 
 
 def _env_int(name: str, fallback: int) -> int:
@@ -85,9 +111,10 @@ def run_cli(argv: list[str]) -> int:
 
 
 def main() -> int:
-    _ensure_std_streams()
     argv = sys.argv[1:]
-    if argv and argv[0] == "--run-cli":
+    cli_mode = bool(argv) and argv[0] == "--run-cli"
+    _ensure_std_streams(unbuffered=cli_mode)
+    if cli_mode:
         return run_cli(argv[1:])
 
     parser = argparse.ArgumentParser(prog="kemono-dl-gui", description="kemono-dl GUI · 本地图形界面")

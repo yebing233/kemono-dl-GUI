@@ -87,6 +87,8 @@ MAX_LOG_LINES = 20000
 PROGRESS_PATTERN = re.compile(
     r"^\[downloading\]\s+(?P<percent>\d+(?:\.\d+)?)% of (?P<total>[\d.]+ \w+) eta (?P<eta>[\d:]+) at (?P<speed>[\d.]+ \w+/s)"
 )
+#: Percent step between two progress lines kept in the log pane.
+PROGRESS_LOG_STEP = 5.0
 
 
 # --------------------------------------------------------------------------- #
@@ -232,33 +234,52 @@ class Job:
         self.process: subprocess.Popen[str] | None = None
         self.stop_requested = False
         self.lock = threading.Lock()
+        self._logged_percent = 0.0
 
     # -- log ---------------------------------------------------------------
     def append(self, line: str) -> None:
         with self.lock:
-            self.lines.append(line)
-            if len(self.lines) > MAX_LOG_LINES:
-                trim = len(self.lines) - MAX_LOG_LINES
-                del self.lines[:trim]
-                self.dropped += trim
-            self._update_progress(line)
+            if self._progress_tick(line):
+                return
+            self._push(line)
 
-    def _update_progress(self, line: str) -> None:
+    def _push(self, line: str) -> None:
+        """Append to the ring buffer (caller holds :attr:`lock`)."""
+        self.lines.append(line)
+        if len(self.lines) > MAX_LOG_LINES:
+            trim = len(self.lines) - MAX_LOG_LINES
+            del self.lines[:trim]
+            self.dropped += trim
+
+    def _progress_tick(self, line: str) -> bool:
+        """Feed one stdout line into :attr:`progress`; True when it was a tick.
+
+        ``download_file`` repaints its ``[downloading] …% of …`` line with ``\\r``
+        up to ten times per second.  Every tick moves the bar in the GUI, but only
+        each ``PROGRESS_LOG_STEP``-th percent reaches the log pane so 200 MB files
+        do not flood it.
+        """
         stripped = line.strip()
         match = PROGRESS_PATTERN.match(stripped)
         if match:
+            percent = float(match.group("percent"))
             self.progress.update(
-                percent=float(match.group("percent")),
+                percent=percent,
                 total=match.group("total"),
                 eta=match.group("eta"),
                 speed=match.group("speed"),
             )
-            return
+            if percent >= 99.5 or percent - self._logged_percent >= PROGRESS_LOG_STEP:
+                self._logged_percent = percent
+                self._push(stripped)
+            return True
         if stripped.startswith("[downloading] Post:"):
             self.progress["posts"] += 1
         elif stripped.startswith("[downloading] Destination:"):
             self.progress["files"] += 1
             self.progress["percent"] = 0.0
+            self._logged_percent = 0.0
+        return False
 
     def lines_since(self, since: int) -> tuple[int, list[str]]:
         with self.lock:

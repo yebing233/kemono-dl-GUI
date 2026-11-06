@@ -183,9 +183,17 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 | 预设 | 模板 |
 | --- | --- |
 | 默认（service/creator/post） | `{service}/{creator_id}/{post_id}/{filename}` |
+| 仅用帖子标题命名（不含编号） | `{service}/{creator_id}/{post_title}/{filename}` |
+| 帖子标题 + 编号 | `{service}/{creator_id}/{post_title} [{post_id}]/{filename}` |
 | 按作者名分组 | `{service}/{creator_name} [{creator_id}]/{filename}` |
 | 按发布日期分组 | `{service}/{creator_id}/{published:%Y%m%d}/{filename}` |
 | 旧版兼容 | `{service}/{creator_name} [{creator_id}]/[{published:%Y%m%d}] [{post_id}] {post_title}/{index}_{filename}` |
+
+> 想要「用帖子标题当文件夹名」就选第二行那个预设，等价于把模板改成
+> `{service}/{creator_id}/{post_title}/{filename}`；想同时保留编号就选第三行
+> （`{post_title} [{post_id}]`，目录形如 `限定・ステッカー セット [72927321]`）。
+> 标题里的 `<>:"/\|?*` 等非法字符会被自动替换成 `_`；个别帖子标题为空时
+> 会退化成空目录名，此时用带编号的预设更稳妥。
 
 界面下方会给出**实时路径预览**（用示例数据渲染），改模板就能立刻看到
 最终文件会落在哪里，同时校验非法字符与空模板。
@@ -202,6 +210,8 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 * 任务**串行执行**（下一个任务等上一个结束），避免抢占同一个 cookies / 归档文件；
 * 进度条、已下载大小、速度、ETA、帖子数、文件数都是从 CLI 真实输出里解析出来的
   （`[downloading] 12.34% of 5.6 MB eta 0:00:12 at 480.2 KB/s`）；
+* 下载器每秒会刷新约 10 次进度行（`\r` 重绘），界面按 `\r` 拆行后**实时**更新进度条；
+  日志面板只保留每 5% 一条，避免几十万行刷屏；
 * 日志面板保留完整输出，可一键保存为 `.txt`；
 * 「停止」会结束整个进程树（Windows 下用 `taskkill /T`）；
 * 失败的任务可以「重试」，会以同样的参数重新入队；
@@ -260,8 +270,9 @@ CI 里跑的不只是「打包成功」，还包括 `tools/verify_exe.py`：它�
 | `python tools/check_exe_bundle.py` | 不启动 exe，直接解析 PyInstaller 归档：内置解释器、MSVC 运行库、SSL、CA 证书、前端资源、`--run-cli` 自调用路径是否都在包里 |
 | `python tools/check_ui.py` | 检查 `app.js` 里用到的每个元素 id 是否都在 `index.html` 中存在 |
 | `python -m unittest tests.test_gui_args` | 18 个单元测试，逐项核对界面控件与 CLI 参数的映射 |
-| `python -m unittest tests.test_gui_streams` | 4 个单元测试，保证日志管道强制 UTF-8（日文/土耳其文标题不再崩） |
-| `python -m unittest tests.test_gui_server` | 11 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量） |
+| `python -m unittest tests.test_gui_streams` | 5 个单元测试，保证日志管道强制 UTF-8 且不做块缓冲（日文标题不崩、进度不延迟） |
+| `python -m unittest tests.test_gui_server` | 15 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量）与进度行解析 |
+| `python -m unittest tests.test_downloader_progress` | 2 个单元测试，确认 stdout 是管道时仍逐块输出 `\r` 进度（进度条不再停在 0%） |
 | `python tools/docker_test.py` | 以 `0.0.0.0` + 密码模式启动，验证 `/healthz`、401/200、令牌与退出 |
 | `python tools/fetch_wheels.py` | 手动下载 wheel（pip 不可用时的兜底） |
 
@@ -282,6 +293,24 @@ GBK）创建 `sys.stdout`，遇到 GBK 表示不了的字符（例如日文标�
 就会抛 `UnicodeEncodeError: 'gbk' codec can't encode character`。GUI 的 CLI 子进程
 启动时会把它重新配置为 UTF-8（`errors="replace"` 兜底），所以任何语言的标题都能
 安全写进右侧日志面板。回归测试见 `tests/test_gui_streams.py`。
+
+**进度条一直停在 0%，日志半天才刷新？**
+1.0.2 之前的版本会有这个现象：下载器只在 `sys.stdout.isatty()` 为真时才逐块重绘进度，
+而界面里的子进程输出永远是管道，所以每个文件只在结束时打印一行；再加上打包版的
+`sys.stdout` 是 8 KiB 块缓冲，日志要攒满一块才会冒出来。现在下载器无论是不是终端
+都按 10 Hz 输出 `\r` 进度，打包版还会把 CLI 子进程的 stdout 换成直写管道的
+`TextIOWrapper(write_through=True)`，进度条和日志都是实时的。
+（回归测试：`tests/test_downloader_progress.py`、`tests/test_gui_streams.py`）
+
+**想让文件夹用帖子标题，而不是帖子编号？**
+在「命名模板」里把预设换成 **仅用帖子标题命名（不含编号）**，也就是：
+
+```
+{service}/{creator_id}/{post_title}/{filename}
+```
+
+标题里的非法字符会被替换成 `_`；如果想保留编号方便回查，可以用
+`{post_title} [{post_id}]` 作为目录名。
 
 **端口被占用？**
 用 `python -m kemono_dl_gui --port 0`，会自动挑一个空闲端口；便携版重复双击会

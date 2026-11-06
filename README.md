@@ -57,7 +57,12 @@ filters, extension skipping, archive, cookies, per-site logins, `--write-content
 The CLI stays the single source of truth: each download is a real `kemono-dl`
 subprocess, the log pane shows its untouched output, and the bottom bar shows the
 equivalent command line (passwords masked) so any configuration can be
-reproduced in a terminal.
+reproduced in a terminal. Progress is parsed from the downloader's `\r` repaints,
+so the bar moves while a file is still downloading; pick the
+**仅用帖子标题命名 (不含编号)** template preset
+(`{service}/{creator_id}/{post_title}/{filename}`) to name folders after the post
+title instead of its numeric id, or **帖子标题 + 编号**
+(`{post_title} [{post_id}]`) to keep both.
 
 The window is a browser tab served by a loopback-only server. Use **退出程序** in
 the left rail to stop it (closing the tab alone leaves the background process

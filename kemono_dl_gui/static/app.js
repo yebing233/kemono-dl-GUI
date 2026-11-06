@@ -21,6 +21,8 @@ const DATE_TYPES = [
 ];
 const TEMPLATE_PRESETS = [
   ['默认 (服务 / 作者 / 帖子 / 文件名)', '{service}/{creator_id}/{post_id}/{filename}'],
+  ['仅用帖子标题命名 (不含编号)', '{service}/{creator_id}/{post_title}/{filename}'],
+  ['帖子标题 + 编号', '{service}/{creator_id}/{post_title} [{post_id}]/{filename}'],
   ['按帖子标题分类', '{service}/{creator_id}/{post_id} - {post_title}/{filename}'],
   ['按发布日期分类', '{service}/{creator_id}/{published:%Y-%m-%d}/{post_id}/{filename}'],
   ['按作者名分类', '{service}/{creator_name}/{post_id}/{filename}'],

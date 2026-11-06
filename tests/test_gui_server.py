@@ -74,5 +74,49 @@ class MetaTests(unittest.TestCase):
         self.assertNotEqual(server.gui_version(), "unknown")
 
 
+class ProgressParsingTests(unittest.TestCase):
+    """The progress line is repainted with ``\\r`` many times per second."""
+
+    @staticmethod
+    def line(percent: float, speed: str = "1.2 MB/s", eta: str = "00:00:12") -> str:
+        return f"[downloading] {percent:6.2f}% of 10.0 MB eta {eta} at {speed}"
+
+    def job(self) -> server.Job:
+        return server.Job("job-1", "demo", ["python", "-u"], {}, kind="download")
+
+    def test_tick_moves_the_bar_without_logging(self) -> None:
+        job = self.job()
+        job.append(self.line(3.0))
+        self.assertAlmostEqual(job.progress["percent"], 3.0)
+        self.assertEqual(job.progress["speed"], "1.2 MB/s")
+        self.assertEqual(job.progress["eta"], "00:00:12")
+        self.assertEqual(job.lines, [])
+
+    def test_log_keeps_one_line_per_step(self) -> None:
+        job = self.job()
+        for percent in (0.4, 3.0, 5.2, 7.0, 99.6):
+            job.append(self.line(percent))
+        self.assertEqual(len(job.lines), 2)
+        self.assertIn("5.20%", job.lines[0])
+        self.assertIn("99.60%", job.lines[1])
+        self.assertAlmostEqual(job.progress["percent"], 99.6)
+
+    def test_post_and_file_counters(self) -> None:
+        job = self.job()
+        job.append("[downloading] Post: '限定・セット'")
+        job.append("[downloading] Destination: 'a.png'")
+        self.assertEqual(job.progress["posts"], 1)
+        self.assertEqual(job.progress["files"], 1)
+
+    def test_next_file_restarts_the_bar(self) -> None:
+        job = self.job()
+        job.append(self.line(80.0))
+        job.append("[downloading] Destination: 'b.zip'")
+        self.assertEqual(job.progress["percent"], 0.0)
+        job.append(self.line(1.0))
+        self.assertEqual(len(job.lines), 2)  # "Destination:" + the 80 % tick
+        self.assertAlmostEqual(job.progress["percent"], 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

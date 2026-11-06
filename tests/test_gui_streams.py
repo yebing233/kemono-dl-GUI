@@ -72,6 +72,32 @@ class StdStreamTests(unittest.TestCase):
         self.assertNotIsInstance(sys.stdout, io.StringIO)
         self.assertEqual(sys.stdout.encoding.replace("-", "").lower(), "utf8")
 
+    def test_unbuffered_child_stream_bypasses_the_text_buffer(self) -> None:
+        """``--run-cli`` must not wait for an 8 KiB buffer to fill up.
+
+        The frozen child inherited a block-buffered ``sys.stdout``: progress and
+        log lines only reached the GUI in bursts (appearing as "进度不同步").
+        """
+        import os
+        import tempfile
+
+        with tempfile.TemporaryFile() as handle:
+            original = os.dup(1)
+            try:
+                os.dup2(handle.fileno(), 1)
+                sys.stdout = io.TextIOWrapper(io.FileIO(1, "w", closefd=False), encoding="gbk", errors="strict")
+                _ensure_std_streams(unbuffered=True)
+                self.assertTrue(sys.stdout.write_through)
+                self.assertFalse(sys.stdout.line_buffering)
+                sys.stdout.write(JAPANESE_TITLE)  # no newline, no flush()
+            finally:
+                os.dup2(original, 1)
+                os.close(original)
+            handle.seek(0)
+            written = handle.read()
+
+        self.assertEqual(written.decode("utf-8"), JAPANESE_TITLE)
+
 
 if __name__ == "__main__":
     unittest.main()
