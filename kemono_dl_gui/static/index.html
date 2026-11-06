@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="gui-token" content="__GUI_TOKEN__">
+<meta name="color-scheme" content="dark light">
+<title>kemono-dl · GUI</title>
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.4 4.53"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.41-1.41"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6c.5 0 1 .2 1.4.6l1.3 1.3c.4.4.9.6 1.4.6h5.3A2.5 2.5 0 0 1 21 10v6.5A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 2.8 12V4.8A2 2 0 0 1 4.8 2.8H12a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.8Z"/><circle cx="7.6" cy="7.6" r="1.4"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12 20 3M17 6l2.5 2.5M14.5 8.5 17 11"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 7 5 5-5 5"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5 5L20 6.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 10l6.1-.9z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.8 6.8a8 8 0 1 0 10.4 0"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ───────────────────────── rail ───────────────────────── -->
+  <aside class="rail">
+    <a class="brand" href="#top">
+      <img class="brand-mark" src="/static/logo.svg" alt="">
+      <span class="brand-text"><strong>kemono-dl</strong><em>GUI</em></span>
+    </a>
+
+    <nav class="rail-nav">
+      <a class="rail-link is-active" href="#sec-links"><svg class="icon"><use href="#i-link"/></svg><span>链接</span></a>
+      <a class="rail-link" href="#sec-output"><svg class="icon"><use href="#i-folder"/></svg><span>保存位置</span></a>
+      <a class="rail-link" href="#sec-template"><svg class="icon"><use href="#i-tag"/></svg><span>命名模板</span></a>
+      <a class="rail-link" href="#sec-filters"><svg class="icon"><use href="#i-filter"/></svg><span>过滤</span></a>
+      <a class="rail-link" href="#sec-account"><svg class="icon"><use href="#i-key"/></svg><span>账号</span></a>
+      <a class="rail-link" href="#sec-jobs"><svg class="icon"><use href="#i-layers"/></svg><span>任务与日志</span></a>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="badge-row">
+        <span class="badge" id="badgeVersion" title="kemono-dl 版本">v—</span>
+        <span class="badge badge-ok" id="badgeDeps" title="Python 依赖状态">检测中</span>
+      </div>
+      <button class="rail-link rail-button" id="openAbout" type="button">
+        <svg class="icon"><use href="#i-info"/></svg><span>关于与 CLI 对照</span>
+      </button>
+      <button class="rail-link rail-button" id="toggleTheme" type="button">
+        <svg class="icon" id="themeIcon"><use href="#i-moon"/></svg><span id="themeLabel">浅色主题</span>
+      </button>
+      <button class="rail-link rail-button rail-quit" id="btnQuit" type="button">
+        <svg class="icon"><use href="#i-power"/></svg><span>退出程序</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ───────────────────────── main ───────────────────────── -->
+  <div class="main" id="top">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>新建下载</h1>
+        <p>kemono · coomer · pawchive —— 命令行里的每一项能力，都在这里。</p>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill" id="connPill"><i class="dot dot-ok"></i><span>本地服务已连接</span></span>
+        <button class="icon-btn" id="btnRefreshMeta" type="button" title="重新检测环境">
+          <svg class="icon"><use href="#i-refresh"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- ══════════════ form column ══════════════ -->
+      <div class="form-col">
+
+        <div class="banner banner-warn" id="depsBanner" hidden>
+          <svg class="icon"><use href="#i-info"/></svg>
+          <div>
+            <strong>缺少依赖 <code>requests</code></strong>
+            <p>kemono-dl 需要 <code>requests</code> 才能联网下载。</p>
+          </div>
+          <button class="btn btn-sm" id="btnInstallDeps" type="button">安装依赖</button>
+        </div>
+
+        <!-- links -->
+        <section class="card" id="sec-links">
+          <header class="card-head">
+            <span class="card-icon"><svg class="icon"><use href="#i-link"/></svg></span>
+            <div>
+              <h2>下载链接</h2>
+              <p>创作者主页会下载其全部帖子，帖子链接只下载该帖。</p>
+            </div>
+            <span class="card-meta" id="urlCount">0 条</span>
+          </header>
+          <div class="card-body">
+            <div class="field">
+              <label for="urls">链接列表 <span class="hint">每行一个，<code>#</code> 开头的行会被忽略</span></label>
+              <textarea id="urls" class="input mono" rows="5" spellcheck="false"
+                placeholder="https://kemono.cr/patreon/user/12345&#10;https://coomer.st/onlyfans/user/67890/post/11111"></textarea>
+            </div>
+            <div class="site-row">
+              <span class="site-chip"><b>kemono.cr</b></span>
+              <span class="site-chip"><b>coomer.st</b></span>
+              <span class="site-chip"><b>pawchive.pw</b></span>
+              <span class="grow"></span>
+              <button class="link-btn" id="btnClearUrls" type="button">清空</button>
+            </div>
+
+            <div class="field">
+              <label>批次文件 <span class="hint">支持多个 .txt，一行一个链接</span></label>
+              <label class="dropzone dropzone-inline" id="batchDrop" tabindex="0">
+                <svg class="icon"><use href="#i-file"/></svg>
+                <span>拖入批次文件，或<u>点击选择</u></span>
+                <input type="file" id="batchInput" accept=".txt,.list,text/plain" multiple hidden>
+              </label>
+              <div class="file-list" id="batchList"></div>
+            </div>
+
+            <div class="field">
+              <label>收藏创作者 <span class="hint">需要 cookies 或登录状态</span></label>
+              <div class="chip-toggle-row">
+                <label class="chip-toggle"><input type="checkbox" id="favKemono"><span>Kemono 收藏</span></label>
+                <label class="chip-toggle"><input type="checkbox" id="favCoomer"><span>Coomer 收藏</span></label>
+                <label class="chip-toggle"><input type="checkbox" id="favPawchive"><span>Pawchive 收藏</span></label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- output -->
+        <section class="card" id="sec-output">
+          <header class="card-head">
+            <span class="card-icon"><svg class="icon"><use href="#i-folder"/></svg></span>
+            <div>
+              <h2>保存位置</h2>
+              <p>所有文件都相对于此目录，模板可以再往下建子目录。</p>
+            </div>
+          </header>
+          <div class="card-body">
+            <div class="field">
+              <label for="outPath">下载目录</label>
+              <div class="input-row">
+                <input id="outPath" class="input mono" spellcheck="false" placeholder="D:\Downloads\kemono-dl">
+                <button class="btn btn-ghost" id="browsePath" type="button">
+                  <svg class="icon"><use href="#i-folder"/></svg>浏览
+                </button>
+                <button class="icon-btn" id="openPath" type="button" title="在资源管理器中打开">
+                  <svg class="icon"><use href="#i-external"/></svg>
+                </button>
+              </div>
+              <div class="chip-row" id="pathPresets"></div>
+            </div>
+
+            <div class="switch-grid">
+              <label class="switch-row">
+                <input type="checkbox" id="swRestrict">
+                <span class="switch"></span>
+                <span class="switch-text"><b>限制为 ASCII 文件名</b><em>--restrict-names</em></span>
+              </label>
+              <label class="switch-row">
+                <input type="checkbox" id="swNoTmp">
+                <span class="switch"></span>
+                <span class="switch-text"><b>不使用 .tmp 文件</b><em>--no-tmp · 直接写入目标文件</em></span>
+              </label>
+              <label class="switch-row">
+                <input type="checkbox" id="swWriteContent">
+                <span class="switch"></span>
+                <span class="switch-text"><b>保存帖子正文</b><em>--write-content · 输出 HTML</em></span>
+              </label>
+              <label class="switch-row">
+                <input type="checkbox" id="swWriteJson">
+                <span class="switch"></span>
+                <span class="switch-text"><b>保存帖子 JSON</b><em>--write-json · 输出原始 API 响应</em></span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- template -->
+        <section class="card" id="sec-template">
+          <header class="card-head">
+            <span class="card-icon"><svg class="icon"><use href="#i-tag"/></svg></span>
+            <div>
+              <h2>命名模板</h2>
+              <p>用变量拼出文件路径，右侧会按示例数据实时预览。</p>
+            </div>
+            <select class="select select-sm" id="presetSelect" title="模板预设">
+              <option value="">预设…</option>
+            </select>
+          </header>
+          <div class="card-body">
+            <div class="field">
+              <label for="templateInput">输出模板 <span class="hint">--output</span></label>
+              <input id="templateInput" class="input mono" spellcheck="false">
+            </div>
+
+            <div class="chip-row var-chips" id="varChips"></div>
+
+            <div class="preview">
+              <div class="preview-head">
+                <svg class="icon"><use href="#i-terminal"/></svg>
+                <span>预览 · 示例帖子</span>
+              </div>
+              <div class="preview-body" id="previewBody">
+                <div class="preview-line"><span class="preview-type">附件</span><code id="previewAttachments">—</code></div>
+                <div class="preview-line"><span class="preview-type">正文</span><code id="previewContent">—</code></div>
+                <div class="preview-line"><span class="preview-type">JSON</span><code id="previewJson">—</code></div>
+              </div>
+            </div>
+
+            <label class="switch-row switch-row-plain">
+              <input type="checkbox" id="swSplit">
+              <span class="switch"></span>
+              <span class="switch-text"><b>分别为附件 / 正文 / JSON 设置模板</b><em>关闭时一个模板套用全部类型</em></span>
+            </label>
+
+            <div class="split-fields" id="splitFields" hidden>
+              <div class="field">
+                <label for="tAttachments">附件模板 <span class="hint">attachment:</span></label>
+                <input id="tAttachments" class="input mono" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="tContent">正文模板 <span class="hint">content:</span></label>
+                <input id="tContent" class="input mono" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="tJson">JSON 模板 <span class="hint">json:</span></label>
+                <input id="tJson" class="input mono" spellcheck="false">
+              </div>
+            </div>
+
+            <details class="details" id="customVarsBox">
+              <summary>
+                <svg class="icon"><use href="#i-chevron"/></svg>
+                <span>自定义模板变量</span>
+                <em class="hint">--custom-template-variables · JSON</em>
+              </summary>
+              <div class="details-body">
+                <textarea id="customVars" class="input mono" rows="5" spellcheck="false"
+                  placeholder='{"titleTrunc": "'{post_title}'"[:50]}'></textarea>
+                <div class="details-foot">
+                  <span class="msg" id="customVarsMsg"></span>
+                  <button class="link-btn" id="btnVarsExample" type="button">插入示例</button>
+                </div>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <!-- filters -->
+        <section class="card" id="sec-filters">
+          <header class="card-head">
+            <span class="card-icon"><svg class="icon"><use href="#i-filter"/></svg></span>
+            <div>
+              <h2>过滤</h2>
+              <p>按日期或扩展名挑选要下载的内容。</p>
+            </div>
+          </header>
+          <div class="card-body">
+            <div class="field">
+              <label>日期过滤 <span class="hint">--date / --datebefore / --dateafter</span></label>
+              <div class="date-rows" id="dateRows">
+                <!-- rendered by app.js -->
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="extInput">跳过的扩展名 <span class="hint">--skip-extensions · 回车添加，如 zip、psd</span></label>
+              <div class="tag-input" id="extWrap">
+                <div class="chip-row" id="extChips"></div>
+                <input id="extInput" class="tag-field" placeholder="输入扩展名后回车" spellcheck="false">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <label class="switch-row switch-row-plain">
+                <input type="checkbox" id="swSkipAttachments">
+                <span class="switch"></span>
+                <span class="switch-text"><b>跳过附件</b><em>--skip-attachments</em></span>
+              </label>
+              <div class="field grow">
+                <label for="archivePath">归档文件 <span class="hint">--archive</span></label>
+                <div class="input-row">
+                  <input id="archivePath" class="input mono" spellcheck="false" placeholder="已下载帖子的记录文件，可留空">
+                  <button class="btn btn-ghost" id="browseArchive" type="button">选择</button>
+                  <input type="file" id="archiveInput" accept=".txt,.log,text/plain" hidden>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- account -->
+        <section class="card" id="sec-account">
+          <header class="card-head">
+            <span class="card-icon"><svg class="icon"><use href="#i-key"/></svg></span>
+            <div>
+              <h2>账号</h2>
+              <p>cookies 用于受限内容与收藏；登录会在启动时先换取会话。</p>
+            </div>
+          </header>
+          <div class="card-body">
+            <div class="field">
+              <label>Cookies 文件 <span class="hint">--cookies · 可多次提供</span></label>
+              <label class="dropzone dropzone-inline" id="cookieDrop" tabindex="0">
+                <svg class="icon"><use href="#i-file"/></svg>
+                <span>拖入 cookies.txt，或<u>点击选择</u></span>
+                <input type="file" id="cookieInput" accept=".txt,text/plain" multiple hidden>
+              </label>
+              <div class="file-list" id="cookieList"></div>
+            </div>
+
+            <div class="field">
+              <label>登录 <span class="hint">留空则不登录</span></label>
+              <div class="login-grid">
+                <details class="login-card">
+                  <summary><span class="site-chip"><b>Kemono</b></span><span class="login-state" data-state="kemono">未填写</span></summary>
+                  <div class="login-body">
+                    <input class="input" id="kemonoUser" placeholder="用户名 / 邮箱" autocomplete="off">
+                    <input class="input" id="kemonoPass" type="password" placeholder="密码" autocomplete="new-password">
+                  </div>
+                </details>
+                <details class="login-card">
+                  <summary><span class="site-chip"><b>Coomer</b></span><span class="login-state" data-state="coomer">未填写</span></summary>
+                  <div class="login-body">
+                    <input class="input" id="coomerUser" placeholder="用户名 / 邮箱" autocomplete="off">
+                    <input class="input" id="coomerPass" type="password" placeholder="密码" autocomplete="new-password">
+                  </div>
+                </details>
+                <details class="login-card">
+                  <summary><span class="site-chip"><b>Pawchive</b></span><span class="login-state" data-state="pawchive">未填写</span></summary>
+                  <div class="login-body">
+                    <input class="input" id="pawchiveUser" placeholder="用户名 / 邮箱" autocomplete="off">
+                    <input class="input" id="pawchivePass" type="password" placeholder="密码" autocomplete="new-password">
+                  </div>
+                </details>
+              </div>
+              <p class="hint hint-block">密码只保存在浏览器本机（localStorage）并直接传给 CLI；命令行预览里会显示为 <code>******</code>。</p>
+            </div>
+          </div>
+        </section>
+
+        <footer class="form-foot">
+          <button class="link-btn" id="btnReset" type="button">恢复默认设置</button>
+          <span class="hint">设置自动保存在浏览器，快捷键 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 开始下载</span>
+        </footer>
+      </div>
+
+      <!-- ══════════════ side column ══════════════ -->
+      <aside class="side-col" id="sec-jobs">
+        <section class="card card-jobs">
+          <header class="card-head card-head-tight">
+            <span class="card-icon"><svg class="icon"><use href="#i-layers"/></svg></span>
+            <div><h2>任务队列</h2></div>
+            <button class="icon-btn" id="btnClearJobs" type="button" title="清除已完成任务">
+              <svg class="icon"><use href="#i-trash"/></svg>
+            </button>
+          </header>
+          <div class="job-list" id="jobList">
+            <div class="empty" id="jobEmpty">
+              <svg class="icon"><use href="#i-download"/></svg>
+              <p>还没有任务</p>
+              <span>填好左侧表单后点击「开始下载」</span>
+            </div>
+          </div>
+
+          <div class="job-detail" id="jobDetail" hidden>
+            <div class="job-detail-top">
+              <div class="job-title" id="jobTitle">—</div>
+              <span class="status-chip" id="jobStatus">—</span>
+            </div>
+            <div class="progress"><div class="progress-bar" id="jobProgressBar"></div></div>
+            <div class="progress-meta">
+              <span id="jobPercent">0%</span>
+              <span id="jobSpeed">—</span>
+              <span id="jobEta">—</span>
+            </div>
+            <div class="job-stats">
+              <div><b id="jobPosts">0</b><em>帖子</em></div>
+              <div><b id="jobFiles">0</b><em>文件</em></div>
+              <div><b id="jobElapsed">0s</b><em>耗时</em></div>
+            </div>
+            <div class="job-actions">
+              <button class="btn btn-sm btn-danger" id="btnStop" type="button">
+                <svg class="icon"><use href="#i-stop"/></svg>停止
+              </button>
+              <button class="btn btn-sm btn-ghost" id="btnRetry" type="button">
+                <svg class="icon"><use href="#i-refresh"/></svg>重试
+              </button>
+              <button class="btn btn-sm btn-ghost" id="btnOpenTarget" type="button">
+                <svg class="icon"><use href="#i-folder"/></svg>目录
+              </button>
+            </div>
+          </div>
+
+          <div class="log-toolbar">
+            <span class="log-title"><svg class="icon"><use href="#i-terminal"/></svg>日志</span>
+            <label class="mini-check"><input type="checkbox" id="autoScroll" checked><span>自动滚动</span></label>
+            <button class="icon-btn" id="btnSaveLog" type="button" title="导出日志">
+              <svg class="icon"><use href="#i-download"/></svg>
+            </button>
+          </div>
+          <div class="log" id="logBox" role="log" aria-live="polite">
+            <div class="log-empty" id="logEmpty">输出会显示在这里…</div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <!-- sticky action bar -->
+    <div class="actionbar">
+      <div class="cmd-preview" title="等价命令行">
+        <svg class="icon"><use href="#i-terminal"/></svg>
+        <code id="cmdPreview">kemono-dl …</code>
+        <button class="icon-btn" id="btnCopyCmd" type="button" title="复制命令">
+          <svg class="icon"><use href="#i-copy"/></svg>
+        </button>
+      </div>
+      <div class="actionbar-msgs">
+        <span class="msg msg-err" id="errorMsg"></span>
+        <span class="msg msg-warn" id="warnMsg"></span>
+      </div>
+      <button class="btn btn-primary btn-lg" id="btnStart" type="button">
+        <svg class="icon"><use href="#i-play"/></svg><span>开始下载</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────── folder picker ───────────────────────── -->
+<div class="modal" id="fsModal" hidden>
+  <div class="modal-panel">
+    <header class="modal-head">
+      <h3>选择文件夹</h3>
+      <button class="icon-btn" data-close type="button"><svg class="icon"><use href="#i-x"/></svg></button>
+    </header>
+    <div class="fs-bar">
+      <input class="input mono" id="fsPath">
+      <button class="btn btn-ghost btn-sm" id="fsGo" type="button">前往</button>
+    </div>
+    <div class="fs-drives" id="fsDrives"></div>
+    <div class="fs-list" id="fsList"></div>
+    <footer class="modal-foot">
+      <span class="hint" id="fsHint"></span>
+      <div class="grow"></div>
+      <button class="btn btn-ghost btn-sm" data-close type="button">取消</button>
+      <button class="btn btn-primary btn-sm" id="fsChoose" type="button">选择此文件夹</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ───────────────────────── about ───────────────────────── -->
+<div class="modal" id="aboutModal" hidden>
+  <div class="modal-panel modal-wide">
+    <header class="modal-head">
+      <h3>关于 kemono-dl GUI</h3>
+      <button class="icon-btn" data-close type="button"><svg class="icon"><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="about-grid">
+        <div class="about-item"><em>kemono-dl</em><b id="aboutVersion">—</b></div>
+        <div class="about-item"><em>GUI</em><b id="aboutGui">—</b></div>
+        <div class="about-item"><em>Python</em><b id="aboutPython">—</b></div>
+        <div class="about-item"><em>依赖 requests</em><b id="aboutDeps">—</b></div>
+      </div>
+      <p class="about-path"><span>解释器</span><code id="aboutPythonPath">—</code></p>
+      <p class="about-path"><span>项目目录</span><code id="aboutRepo">—</code></p>
+      <div class="banner banner-warn" id="aboutDepsBanner" hidden>
+        <svg class="icon"><use href="#i-info"/></svg>
+        <div><strong>依赖未安装</strong><p>安装后即可开始下载，日志会显示 pip 输出。</p></div>
+        <button class="btn btn-sm" id="btnInstallDeps2" type="button">安装依赖</button>
+      </div>
+
+      <h4 class="section-title">命令行选项对照</h4>
+      <table class="opt-table">
+        <thead><tr><th>CLI 选项</th><th>说明</th><th>GUI 位置</th></tr></thead>
+        <tbody>
+          <tr><td><code>--path</code></td><td>下载根目录</td><td>保存位置 → 下载目录</td></tr>
+          <tr><td><code>--output</code></td><td>输出路径模板（可带 <code>attachments:</code>/<code>content:</code>/<code>json:</code> 前缀）</td><td>命名模板</td></tr>
+          <tr><td><code>--batch-file</code></td><td>从文本文件读取链接</td><td>链接 → 批次文件</td></tr>
+          <tr><td><code>--cookies</code></td><td>cookies 文件（可多个）</td><td>账号 → Cookies 文件</td></tr>
+          <tr><td><code>--favorite-creators-kemono</code> <code>-coomer</code> <code>-pawchive</code></td><td>下载收藏创作者</td><td>链接 → 收藏创作者</td></tr>
+          <tr><td><code>--kemono-login</code> <code>--coomer-login</code> <code>--pawchive-login</code></td><td>用户名 + 密码登录</td><td>账号 → 登录</td></tr>
+          <tr><td><code>--restrict-names</code></td><td>文件名限制为 ASCII</td><td>保存位置 → 限制为 ASCII 文件名</td></tr>
+          <tr><td><code>--custom-template-variables</code></td><td>自定义模板变量 JSON</td><td>命名模板 → 自定义模板变量</td></tr>
+          <tr><td><code>--date</code> <code>--datebefore</code> <code>--dateafter</code></td><td>按 <code>added</code>/<code>edited</code>/<code>published</code> 过滤日期</td><td>过滤 → 日期过滤</td></tr>
+          <tr><td><code>--skip-extensions</code></td><td>跳过的扩展名列表</td><td>过滤 → 跳过的扩展名</td></tr>
+          <tr><td><code>--skip-attachments</code></td><td>不下载附件</td><td>过滤 → 跳过附件</td></tr>
+          <tr><td><code>--write-content</code></td><td>保存帖子正文 HTML</td><td>保存位置 → 保存帖子正文</td></tr>
+          <tr><td><code>--write-json</code></td><td>保存帖子 API JSON</td><td>保存位置 → 保存帖子 JSON</td></tr>
+          <tr><td><code>--no-tmp</code></td><td>不产生 .tmp 临时文件</td><td>保存位置 → 不使用 .tmp</td></tr>
+          <tr><td><code>--archive</code></td><td>已下载帖子归档文件</td><td>过滤 → 归档文件</td></tr>
+          <tr><td><code>--version</code></td><td>打印版本号</td><td>左侧栏版本徽标 / 本面板</td></tr>
+        </tbody>
+      </table>
+      <p class="hint hint-block">GUI 不重新实现下载逻辑：每次运行都会以 <code>python -m kemono_dl …</code> 启动真实 CLI，参数与上表一一对应，因此行为与命令行完全一致。</p>
+    </div>
+    <footer class="modal-foot">
+      <span class="hint">本地服务仅监听 127.0.0.1，并校验会话令牌。</span>
+      <div class="grow"></div>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/AlphaSlayer1964/kemono-dl" target="_blank" rel="noreferrer">
+        <svg class="icon"><use href="#i-external"/></svg>上游仓库
+      </a>
+      <button class="btn btn-primary btn-sm" data-close type="button">关闭</button>
+    </footer>
+  </div>
+</div>
+
+<div class="quit-overlay" id="quitOverlay" hidden>
+  <div class="quit-card">
+    <div class="quit-mark"><svg class="icon"><use href="#i-power"/></svg></div>
+    <h2>已退出 kemono-dl GUI</h2>
+    <p>本地服务已经关闭，下载进程也随之结束。你可以直接关闭这个页面；需要再次使用时，重新打开 <code>kemono-dl-gui.exe</code> 即可。</p>
+    <p class="hint">如果还想继续下载，重新启动程序后界面会自动打开。</p>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
