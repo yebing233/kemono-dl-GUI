@@ -77,7 +77,9 @@ visible: values set in pro mode keep applying after you switch back to simple.
   "no more than 1 request per second"; failures keep the CLI's 3 retries and are
   then listed per post with a clickable link to that post, plus a one-time
   toast. Every finished run appends a per-post line to
-  `%LOCALAPPDATA%\kemono-dl-gui\history.jsonl`, and the 下载记录 panel groups it
+  `history.jsonl` **next to the exe** (falls back to `%LOCALAPPDATA%\kemono-dl-gui\`
+when the program folder is read-only; override with `KEMONO_DL_GUI_HISTORY_DIR`),
+and the 下载记录 panel groups it
   by site/service/author with an "latest post" column and CSV export — run the
   same author page later and compare to see what they added.
 

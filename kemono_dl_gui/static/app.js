@@ -1171,7 +1171,9 @@ function renderHistory(data) {
   $('historySummary').textContent = creators.length
     ? `${creators.length} 位作者 · ${data.posts} 篇帖子`
     : '';
-  $('historyPath').textContent = data && data.path ? `记录文件：${data.path}` : '';
+  $('historyPath').textContent = data && data.path
+    ? `${data.portable === false ? '记录文件（程序目录不可写，已改存到用户数据目录）：' : '记录文件（与程序同目录）：'}${data.path}`
+    : '';
 
   for (const creator of creators) {
     const tr = document.createElement('tr');

@@ -209,3 +209,6 @@ dist/
 build/
 downloads/
 
+# GUI runtime files
+history.jsonl
+kemono-dl-history.csv

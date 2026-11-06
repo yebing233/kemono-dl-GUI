@@ -92,6 +92,7 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 | `KEMONO_DL_GUI_PASSWORD` | 空 | **强烈建议设置**。设置后整个界面走 HTTP Basic 认证（用户名随便填，密码填这个值）。想给局域网用就把端口映射改成 `"8765:8765"`，并且一定配上密码 |
 | `KEMONO_DL_GUI_DOWNLOAD_DIR` | `/downloads` | 界面「保存位置」的默认值 |
 | `KEMONO_DL_GUI_DATA` | `/data` | cookies / 批次文件 / 自定义模板变量的落盘位置 |
+| `KEMONO_DL_GUI_HISTORY_DIR` | `/data` | 下载记录 `history.jsonl` 的目录（默认程序同目录） |
 | `KEMONO_DL_GUI_NO_BROWSER` | `1` | 不尝试打开浏览器（容器里没有桌面） |
 
 挂载点：`/downloads` 放下载结果，`/data` 放上传的 cookies、批次文件等；两个都建议
@@ -303,8 +304,10 @@ pawchive 的文件服务器（前面挂了 DDoS-Guard）在它的拦截页里写
 ### 下载记录与「作者更新对比」
 
 每次任务结束（正常结束或失败退出都算），GUI 会把任务日志里每个帖子整理成一条记录，
-追加到 `%LOCALAPPDATA%\kemono-dl-gui\history.jsonl`（便携版 / Docker 用
-`KEMONO_DL_GUI_DATA` 指向的目录）。
+追加到 **程序所在目录** 的 `history.jsonl`（便携版就躺在 `kemono-dl-gui.exe` 旁边，
+整个文件夹拷走、换台电脑都还在）。如果程序放在只读目录（例如 `C:\Program Files`），
+会自动退回 `%LOCALAPPDATA%\kemono-dl-gui\`，面板底部会显示真实路径；
+也可以用环境变量 `KEMONO_DL_GUI_HISTORY_DIR` 指定。Docker 里指向数据卷 `/data`。
 
 左侧「下载记录」按钮打开面板，按**「站点 / 服务 / 作者」**汇总：
 

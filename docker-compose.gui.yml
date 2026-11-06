@@ -18,6 +18,8 @@ services:
       - "127.0.0.1:8765:8765"
     environment:
       KEMONO_DL_GUI_DATA: /data
+      # 下载记录落在数据卷里，容器重建也不丢
+      KEMONO_DL_GUI_HISTORY_DIR: /data
       KEMONO_DL_GUI_DOWNLOAD_DIR: /downloads
       KEMONO_DL_GUI_HOST: 0.0.0.0
       KEMONO_DL_GUI_PORT: "8765"

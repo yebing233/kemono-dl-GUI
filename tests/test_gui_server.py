@@ -219,16 +219,60 @@ class FailureTrackingTests(unittest.TestCase):
         self.assertEqual(job.summary()["failures"], [])
 
 
+class HistoryLocationTests(unittest.TestCase):
+    def test_history_lives_next_to_the_program(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KEMONO_DL_GUI_HISTORY_DIR", None)
+            self.assertTrue(server.writable_dir(server.portable_dir()))
+            self.assertEqual(server.history_dir(), server.portable_dir())
+            self.assertEqual(server._history_path(), server.portable_dir() / "history.jsonl")
+
+    def test_env_override_wins(self) -> None:
+        with mock.patch.dict(os.environ, {"KEMONO_DL_GUI_HISTORY_DIR": "D:/portable/data"}, clear=False):
+            self.assertEqual(server.history_dir(), Path("D:/portable/data"))
+            self.assertEqual(server._history_path(), Path("D:/portable/data") / "history.jsonl")
+
+    def test_read_only_program_dir_falls_back_to_app_data(self) -> None:
+        blocked = Path(__file__).resolve().parent.parent / ".build" / "not-a-dir"
+        blocked.parent.mkdir(parents=True, exist_ok=True)
+        blocked.write_text("file, not a folder", encoding="utf-8")
+        try:
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("KEMONO_DL_GUI_HISTORY_DIR", None)
+                with mock.patch.object(server, "portable_dir", return_value=blocked):
+                    self.assertFalse(server.writable_dir(blocked))
+                    self.assertEqual(server.history_dir(), server.APP_DATA)
+        finally:
+            blocked.unlink()
+
+    def test_summary_reports_whether_it_is_portable(self) -> None:
+        folder = Path(__file__).resolve().parent.parent / ".build" / "test-tmp" / "history-location"
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            with mock.patch.dict(os.environ, {"KEMONO_DL_GUI_HISTORY_DIR": str(folder)}, clear=False):
+                summary = server.history_summary()
+                self.assertEqual(summary["path"], str(folder / "history.jsonl"))
+                self.assertFalse(summary["portable"])
+                self.assertEqual(summary["portableDir"], str(server.portable_dir()))
+        finally:
+            import shutil
+
+            shutil.rmtree(folder, ignore_errors=True)
+
+
 class HistoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(__file__).resolve().parent.parent / ".build" / "test-tmp" / "history-test"
         self.folder.mkdir(parents=True, exist_ok=True)
-        self.previous = server.APP_DATA
-        server.APP_DATA = self.folder
+        self.previous_env = os.environ.get("KEMONO_DL_GUI_HISTORY_DIR")
+        os.environ["KEMONO_DL_GUI_HISTORY_DIR"] = str(self.folder)
         server._history_path().write_text("", encoding="utf-8")
 
     def tearDown(self) -> None:
-        server.APP_DATA = self.previous
+        if self.previous_env is None:
+            os.environ.pop("KEMONO_DL_GUI_HISTORY_DIR", None)
+        else:
+            os.environ["KEMONO_DL_GUI_HISTORY_DIR"] = self.previous_env
         server._history_path()
         import shutil
 

@@ -76,6 +76,42 @@ def ensure_dir(path: Path) -> Path:
         return fallback
 
 
+def writable_dir(path: Path) -> bool:
+    """True when ``path`` exists (or can be created) and accepts a probe file."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write-probe"
+        probe.write_bytes(b"")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def portable_dir() -> Path:
+    """Folder that holds the running program — next to ``kemono-dl-gui.exe``."""
+    if FROZEN:
+        return Path(sys.executable).resolve().parent
+    return REPO_ROOT
+
+
+def history_dir() -> Path:
+    """Where the download history is written.
+
+    Preference order: ``KEMONO_DL_GUI_HISTORY_DIR`` → the program's own folder
+    (so a portable exe keeps its history on the USB stick next to itself) →
+    ``APP_DATA`` when that folder is read-only (e.g. Program Files) so recording
+    never fails silently.
+    """
+    override = os.environ.get(HISTORY_DIR_ENV)
+    if override:
+        return Path(override).expanduser()
+    beside = portable_dir()
+    if writable_dir(beside):
+        return beside
+    return APP_DATA
+
+
 APP_DATA = app_data_dir()
 UPLOAD_DIR = APP_DATA / "uploads"
 CUSTOM_VARS_FILE = APP_DATA / "custom-template-variables.json"
@@ -85,6 +121,7 @@ HISTORY_FILE = APP_DATA / "history.jsonl"
 DATA_ENV = "KEMONO_DL_GUI_DATA"
 DOWNLOAD_DIR_ENV = "KEMONO_DL_GUI_DOWNLOAD_DIR"
 PASSWORD_ENV = "KEMONO_DL_GUI_PASSWORD"
+HISTORY_DIR_ENV = "KEMONO_DL_GUI_HISTORY_DIR"
 
 MAX_LOG_LINES = 20000
 PROGRESS_PATTERN = re.compile(
@@ -628,9 +665,17 @@ STATE: AppState | None = None
 # --------------------------------------------------------------------------- #
 def _history_path() -> Path:
     """Absolute path of the JSONL history file (creates its folder)."""
-    global APP_DATA, HISTORY_FILE
-    APP_DATA = ensure_dir(APP_DATA)
-    HISTORY_FILE = APP_DATA / "history.jsonl"
+    global HISTORY_FILE
+    target = history_dir()
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # An explicit KEMONO_DL_GUI_HISTORY_DIR is honoured as-is so the panel can
+        # show the real configuration; the automatic location falls back so that
+        # recording never silently stops working.
+        if not os.environ.get(HISTORY_DIR_ENV):
+            target = ensure_dir(APP_DATA)
+    HISTORY_FILE = target / "history.jsonl"
     return HISTORY_FILE
 
 
@@ -780,8 +825,12 @@ def history_summary() -> dict[str, Any]:
                 "failures": int(record.get("failures", 0)),
             }
     ordered = sorted(creators.values(), key=lambda item: item["lastTs"], reverse=True)
+    path = _history_path()
+    beside = portable_dir()
     return {
-        "path": str(_history_path()),
+        "path": str(path),
+        "portableDir": str(beside),
+        "portable": path.parent.resolve() == beside.resolve(),
         "posts": len(records),
         "creators": ordered,
     }
@@ -1006,6 +1055,9 @@ class Handler(BaseHTTPRequestHandler):
             "defaultTemplate": DEFAULT_TEMPLATE,
             "templateTypes": list(TEMPLATE_TYPES),
             "repoRoot": str(REPO_ROOT),
+            "portableDir": str(portable_dir()),
+            "historyPath": str(_history_path()),
+            "historyBesideExe": _history_path().parent.resolve() == portable_dir().resolve(),
             "platform": sys.platform,
             "uptime": int(time.time() - STATE.start_time),
             "sampleVariables": sorted(args_module.SAMPLE_VARIABLES.keys()),
@@ -1272,10 +1324,11 @@ def show_error(message: str) -> None:
 
 
 def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
-    global STATE, APP_DATA, UPLOAD_DIR, CUSTOM_VARS_FILE
+    global STATE, APP_DATA, UPLOAD_DIR, CUSTOM_VARS_FILE, HISTORY_FILE
     APP_DATA = ensure_dir(app_data_dir())
     UPLOAD_DIR = APP_DATA / "uploads"
     CUSTOM_VARS_FILE = APP_DATA / "custom-template-variables.json"
+    HISTORY_FILE = history_dir() / "history.jsonl"
     if CUSTOM_VARS_FILE.exists():
         try:
             CUSTOM_VARS_FILE.unlink()
