@@ -30,6 +30,8 @@
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="M10.3 3.9 2.5 17.4a1.9 1.9 0 0 0 1.7 2.9h15.6a1.9 1.9 0 0 0 1.7-2.9L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17v.5"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4.5V9h4.5"/><path d="M12 7.5V12l3 2"/></symbol>
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 10l6.1-.9z"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
@@ -62,6 +64,9 @@
         <span class="badge" id="badgeVersion" title="kemono-dl 版本">v—</span>
         <span class="badge badge-ok" id="badgeDeps" title="Python 依赖状态">检测中</span>
       </div>
+      <button class="rail-link rail-button" id="openHistory" type="button">
+        <svg class="icon"><use href="#i-history"/></svg><span>下载记录</span>
+      </button>
       <button class="rail-link rail-button" id="openSettings" type="button">
         <svg class="icon"><use href="#i-gear"/></svg><span>设置</span>
       </button>
@@ -176,6 +181,15 @@
                 </button>
               </div>
               <div class="chip-row" id="pathPresets"></div>
+            </div>
+
+            <div class="field" data-adv>
+              <label for="requestInterval">请求间隔（秒）</label>
+              <div class="input-row">
+                <input id="requestInterval" class="input mono" type="number" min="0" max="60" step="0.5" inputmode="decimal" placeholder="1">
+                <span class="field-hint">每次向文件服务器请求前等待的秒数，默认 1；0 表示不限速</span>
+              </div>
+              <p class="hint">pawchive 的文件服务器要求「每秒不超过 1 个请求」，调太快会被暂时封禁（403）。</p>
             </div>
 
             <div class="switch-grid">
@@ -444,6 +458,16 @@
                 <svg class="icon"><use href="#i-folder"/></svg>目录
               </button>
             </div>
+
+            <div class="failure-block" id="failureBlock" hidden>
+              <div class="failure-head">
+                <span class="failure-title"><svg class="icon"><use href="#i-warning"/></svg><b id="failureCount">0</b> 个文件下载失败</span>
+                <button class="icon-btn" id="btnCopyFailures" type="button" title="复制全部失败链接">
+                  <svg class="icon"><use href="#i-copy"/></svg>
+                </button>
+              </div>
+              <ul class="failure-list" id="failureList"></ul>
+            </div>
           </div>
 
           <div class="log-toolbar">
@@ -542,6 +566,7 @@
           <tr><td><code>--write-content</code></td><td>保存帖子正文 HTML</td><td>保存位置 → 保存帖子正文</td></tr>
           <tr><td><code>--write-json</code></td><td>保存帖子 API JSON</td><td>保存位置 → 保存帖子 JSON</td></tr>
           <tr><td><code>--no-tmp</code></td><td>不产生 .tmp 临时文件</td><td>保存位置 → 不使用 .tmp</td></tr>
+          <tr><td><code>--request-interval</code></td><td>每次请求文件服务器前的等待秒数</td><td>保存位置 → 请求间隔</td></tr>
           <tr><td><code>--archive</code></td><td>已下载帖子归档文件</td><td>过滤 → 归档文件</td></tr>
           <tr><td><code>--version</code></td><td>打印版本号</td><td>左侧栏版本徽标 / 本面板</td></tr>
         </tbody>
@@ -593,6 +618,44 @@
       <span class="hint">模式与主题只保存在本机浏览器里。</span>
       <div class="grow"></div>
       <button class="btn btn-primary btn-sm" data-close type="button">完成</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ───────────────────────── download history ───────────────────────── -->
+<div class="modal" id="historyModal" hidden>
+  <div class="modal-panel modal-wide">
+    <header class="modal-head">
+      <h3>下载记录 · 作者更新对比</h3>
+      <button class="icon-btn" data-close type="button"><svg class="icon"><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <p class="hint" id="historyHint">每次任务结束后会自动记下：站点、作者、帖子、文件数、跳过与失败数量。下次打开这个面板，就能看出作者新增了什么。</p>
+      <div class="history-summary" id="historySummary"></div>
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr><th>作者</th><th>帖子</th><th>最近下载</th><th>最新帖子</th></tr>
+          </thead>
+          <tbody id="historyRows"></tbody>
+        </table>
+        <div class="history-empty" id="historyEmpty" hidden>
+          <svg class="icon"><use href="#i-history"/></svg>
+          <p>还没有下载记录</p>
+          <span>跑完一次下载任务后，这里会按作者汇总。</span>
+        </div>
+      </div>
+      <p class="hint mono" id="historyPath">—</p>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn btn-ghost btn-sm" id="btnHistoryExport" type="button">
+        <svg class="icon"><use href="#i-download"/></svg>导出 CSV
+      </button>
+      <button class="btn btn-ghost btn-sm" id="btnHistoryClear" type="button">
+        <svg class="icon"><use href="#i-trash"/></svg>清空记录
+      </button>
+      <div class="grow"></div>
+      <button class="btn btn-primary btn-sm" data-close type="button">关闭</button>
     </footer>
   </div>
 </div>

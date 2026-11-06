@@ -1594,3 +1594,142 @@ body[data-mode="simple"] .switch-grid {
 @media (max-width: 720px) {
   body[data-mode="simple"] .pill-button span { display: none; }
 }
+/* ── 请求限速说明 ─────────────────────────────────────────── */
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+#requestInterval {
+  max-width: 120px;
+}
+
+/* ── 失败清单（任务详情内） ────────────────────────────────── */
+
+.failure-block {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.failure-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--danger, #f87171) 12%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.failure-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--danger, #f87171);
+  flex: 1;
+  min-width: 0;
+}
+
+.failure-title .icon { width: 14px; height: 14px; }
+
+.failure-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 10px 10px;
+  max-height: 190px;
+  overflow: auto;
+}
+
+.failure-list li { padding: 6px 0; border-top: 1px dashed var(--border); }
+.failure-list li:first-child { border-top: 0; }
+
+.failure-post {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failure-post a { color: var(--accent-2, #7dd3fc); text-decoration: none; }
+.failure-post a:hover { text-decoration: underline; }
+
+.failure-file {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  padding-left: 10px;
+}
+
+.failure-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failure-file em { font-style: normal; flex: none; color: var(--danger, #f87171); }
+
+/* ── 下载记录面板 ─────────────────────────────────────────── */
+
+.history-summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.history-summary:empty { display: none; }
+
+.history-table-wrap {
+  max-height: 48vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.history-table th,
+.history-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.history-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.history-table td a { color: var(--accent-2, #7dd3fc); text-decoration: none; }
+.history-table td a:hover { text-decoration: underline; }
+.history-table td:nth-child(4) { white-space: normal; max-width: 280px; }
+
+.history-table .muted { color: var(--text-dim); font-style: normal; font-size: 11px; }
+
+.history-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.history-empty .icon { width: 26px; height: 26px; opacity: 0.5; }
+.history-empty p { margin: 8px 0 2px; color: var(--text); font-size: 13px; }
+.history-empty span { font-size: 12px; }
+
+.toast.is-warn .icon { color: var(--warn, #fbbf24); }

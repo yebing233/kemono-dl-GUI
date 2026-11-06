@@ -10,7 +10,7 @@ from typing import List, Literal
 
 from requests.exceptions import RequestException
 
-from .downloader import download_file
+from .downloader import download_file, set_request_interval
 from .models import Attachment, Creator, FavoriteCreator, FileTemplateVaribales, Post
 from .session import CustomSession
 from .utils import compute_sha256, generate_file_path, get_sha256_hash  # , get_sha256_url_content
@@ -49,6 +49,7 @@ class KemonoDL:
         write_content: bool = False,
         write_json: bool = False,
         no_tmp: bool = False,
+        request_interval: float = 1.0,
     ) -> None:
         self.domain = KemonoDL.COOMER_DOMAIN
         self.session = CustomSession()
@@ -65,6 +66,8 @@ class KemonoDL:
         self.write_content = write_content
         self.write_json = write_json
         self.no_tmp = no_tmp
+        self.request_interval = max(0.0, float(request_interval))
+        set_request_interval(self.request_interval)
 
         self.archive_file = archive_file
         self.archived_posts = []

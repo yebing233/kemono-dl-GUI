@@ -185,5 +185,110 @@ class ProgressParsingTests(unittest.TestCase):
         self.assertAlmostEqual(job.progress["percent"], 1.0)
 
 
+POST_A = "https://kemono.cr/patreon/user/12345/post/67890"
+POST_B = "https://pawchive.pw/fanbox/user/72927321/post/111"
+FAIL_A = (
+    "[Error] Failed to download attachment from "
+    "'https://file.pawchive.pw/data/aa/bb/cc.mp4?f=Momoko_.mp4' (1/3): 404 Client Error: Not Found"
+)
+
+
+class FailureTrackingTests(unittest.TestCase):
+    """The GUI must remember which post a failed attachment belongs to."""
+
+    def job(self) -> server.Job:
+        return server.Job("job-1", "demo", ["x"], {}, kind="download")
+
+    def test_failure_keeps_the_post_url(self) -> None:
+        job = self.job()
+        job.append(f"[downloading] Post URL: {POST_A}")
+        job.append("[downloading] Post: 限定・ステッカー")
+        job.append(FAIL_A)
+        failures = job.summary()["failures"]
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0]["postUrl"], POST_A)
+        self.assertIn("data/aa/bb/cc.mp4", failures[0]["fileUrl"])
+        self.assertEqual(failures[0]["attempt"], 1)
+        self.assertEqual(failures[0]["total"], 3)
+        self.assertIn("404", failures[0]["message"])
+
+    def test_no_failures_for_clean_runs(self) -> None:
+        job = self.job()
+        job.append(f"[downloading] Post URL: {POST_A}")
+        job.append("[downloading] 100.00% of 1.00 MiB eta 00:00:00 at 1.0 MB/s")
+        self.assertEqual(job.summary()["failures"], [])
+
+
+class HistoryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.folder = Path(__file__).resolve().parent.parent / ".build" / "test-tmp" / "history-test"
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.previous = server.APP_DATA
+        server.APP_DATA = self.folder
+        server._history_path().write_text("", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        server.APP_DATA = self.previous
+        server._history_path()
+        import shutil
+
+        shutil.rmtree(self.folder, ignore_errors=True)
+
+    def lines(self, post: str, files: int = 2, failures: int = 0) -> list[str]:
+        lines = [
+            f"[downloading] Post URL: {post}",
+            f"[downloading] Post: 限定・ステッカー {post.rsplit('/', 1)[-1]}",
+            f"[downloading] Attachments: {files}",
+        ]
+        for index in range(files):
+            lines.append(f"[downloading] Destination: 'file{index}.png'")
+        lines.append("[skip] Already downloaded, size verified (1.00 MiB)")
+        for _ in range(failures):
+            lines.append(FAIL_A)
+        return lines
+
+    def test_parse_groups_lines_per_post(self) -> None:
+        records = server.parse_post_records(self.lines(POST_A, files=2) + self.lines(POST_B, files=1, failures=1))
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["site"], "kemono.cr")
+        self.assertEqual(records[0]["service"], "patreon")
+        self.assertEqual(records[0]["creatorId"], "12345")
+        self.assertEqual(records[0]["postId"], "67890")
+        self.assertEqual(records[0]["files"], 2)
+        self.assertEqual(records[0]["failures"], 0)
+        self.assertEqual(records[1]["site"], "pawchive.pw")
+        self.assertEqual(records[1]["service"], "fanbox")
+        self.assertEqual(records[1]["creatorId"], "72927321")
+        self.assertEqual(records[1]["failures"], 1)
+        self.assertEqual(records[1]["errors"], ["404 Client Error: Not Found"])
+
+    def test_history_dedupes_and_summarises_creators(self) -> None:
+        server.append_history(server.parse_post_records(self.lines(POST_A)))
+        server.append_history(server.parse_post_records(self.lines(POST_A, files=5, failures=0)))
+        server.append_history(server.parse_post_records(self.lines(POST_B, files=1, failures=1)))
+        summary = server.history_summary()
+        self.assertEqual(summary["posts"], 2)
+        keys = {creator["key"]: creator for creator in summary["creators"]}
+        self.assertIn("kemono.cr/patreon/12345", keys)
+        self.assertEqual(keys["kemono.cr/patreon/12345"]["posts"], 1)
+        self.assertEqual(keys["kemono.cr/patreon/12345"]["files"], 5)  # newest record wins
+        self.assertEqual(keys["pawchive.pw/fanbox/72927321"]["failures"], 1)
+        self.assertEqual(keys["pawchive.pw/fanbox/72927321"]["latest"]["url"], POST_B)
+
+    def test_csv_export_has_a_bom_and_the_author(self) -> None:
+        server.append_history(server.parse_post_records(self.lines(POST_A)))
+        text = server.history_csv()
+        self.assertTrue(text.startswith("\ufeff"), "Excel needs the BOM to read UTF-8")
+        self.assertIn("作者", text)
+        self.assertIn("12345", text)
+        self.assertIn(POST_A, text)
+
+    def test_clear_history_empties_the_file(self) -> None:
+        server.append_history(server.parse_post_records(self.lines(POST_A)))
+        server.clear_history()
+        self.assertEqual(server.load_history(), [])
+        self.assertEqual(server.history_summary()["posts"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

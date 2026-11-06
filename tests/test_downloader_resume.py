@@ -20,6 +20,15 @@ PAYLOAD = bytes(range(256)) * 40  # 10240 字节
 CHUNK = 1024
 
 
+def setUpModule() -> None:
+    """The default 1 s politeness delay would make this suite crawl."""
+    downloader.set_request_interval(0)
+
+
+def tearDownModule() -> None:
+    downloader.set_request_interval(1.0)
+
+
 def workdir() -> Path:
     path = Path(__file__).resolve().parent.parent / ".build" / "test-tmp" / uuid.uuid4().hex
     path.mkdir(parents=True, exist_ok=True)

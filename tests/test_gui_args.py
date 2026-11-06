@@ -218,5 +218,38 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(cfg["skip_extensions"], [])
 
 
+class RequestIntervalTests(unittest.TestCase):
+    """``--request-interval`` map from the GUI's 请求间隔 field."""
+
+    def test_default_is_omitted_from_the_command(self):
+        result = build_command(base_config(), "python", "C:/out")
+        self.assertEqual(result.errors, [])
+        self.assertNotIn("--request-interval", result.argv)
+
+    def test_explicit_value_is_forwarded(self):
+        config = base_config(requestInterval=0.5)
+        result = build_command(config, "python", "C:/out")
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.argv[result.argv.index("--request-interval") + 1], "0.5")
+
+    def test_zero_disables_the_delay(self):
+        config = base_config(requestInterval=0)
+        result = build_command(config, "python", "C:/out")
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.argv[result.argv.index("--request-interval") + 1], "0")
+
+    def test_garbage_falls_back_to_the_default(self):
+        cfg = normalise_config({"requestInterval": "abc"}, "C:/out")
+        self.assertEqual(cfg["request_interval"], 1.0)
+
+    def test_values_are_clamped(self):
+        self.assertEqual(normalise_config({"requestInterval": -3}, "C:/out")["request_interval"], 0.0)
+        self.assertEqual(normalise_config({"requestInterval": 999}, "C:/out")["request_interval"], 60.0)
+
+    def test_whole_numbers_lose_the_decimal_point(self):
+        result = build_command(base_config(requestInterval=2.0), "python", "C:/out")
+        self.assertEqual(result.argv[result.argv.index("--request-interval") + 1], "2")
+
+
 if __name__ == "__main__":
     unittest.main()

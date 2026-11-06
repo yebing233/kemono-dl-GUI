@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import base64
 import binascii
+import csv
+import io
 import json
 import mimetypes
 import os
@@ -77,6 +79,7 @@ def ensure_dir(path: Path) -> Path:
 APP_DATA = app_data_dir()
 UPLOAD_DIR = APP_DATA / "uploads"
 CUSTOM_VARS_FILE = APP_DATA / "custom-template-variables.json"
+HISTORY_FILE = APP_DATA / "history.jsonl"
 
 #: Environment variables used by the Docker image / remote deployments.
 DATA_ENV = "KEMONO_DL_GUI_DATA"
@@ -110,6 +113,20 @@ def parse_bytes(text: str) -> float:
     if not match:
         return 0.0
     return float(match.group("value")) * SIZE_UNITS[match.group("unit")]
+
+
+#: ``[downloading] Post URL: https://kemono.cr/patreon/user/123/post/456``
+POST_URL_PATTERN = re.compile(
+    r"^\[downloading\] Post URL:\s*https?://(?P<site>[^/\s]+)/(?P<service>[^/\s]+)"
+    r"/user/(?P<creator>[^/\s]+)/post/(?P<post>[^/\s]+)/?$"
+)
+#: ``[downloading] Post: some title``
+POST_TITLE_PATTERN = re.compile(r"^\[downloading\] Post:\s*(?P<title>.+)$")
+#: ``[Error] Failed to download attachment from 'URL' (2/3): 404 Client Error``
+FAILURE_PATTERN = re.compile(
+    r"^\[Error\] Failed to download attachment from '(?P<url>[^']+)' "
+    r"\((?P<attempt>\d+)/(?P<total>\d+)\):\s*(?P<message>.*)$"
+)
 
 
 
@@ -268,6 +285,10 @@ class Job:
         self.process: subprocess.Popen[str] | None = None
         self.stop_requested = False
         self.lock = threading.Lock()
+        #: per-attachment failures, each with its post URL so the UI can link back
+        self.failures: list[dict[str, Any]] = []
+        #: post URL announced by ``[downloading] Post URL:`` (current one)
+        self._post_url = ""
         self._logged_percent = 0.0
         #: bytes of files that finished downloading (``_finished_bytes``) plus the
         #: size of the file currently in flight (``_current_total``).
@@ -372,6 +393,8 @@ class Job:
             self.progress["skipped"] += 1
             self._in_file = False
             self._current_total = 0.0
+        elif stripped.startswith("[downloading] Post URL:"):
+            self._post_url = stripped.split(":", 1)[1].strip()
         elif stripped.startswith("[downloading] Destination:"):
             # printed just before a file starts, so the previous one is finished
             if self._in_file:
@@ -382,6 +405,19 @@ class Job:
             self._in_file = True
             self.progress["percent"] = 0.0
             self._logged_percent = 0.0
+        elif stripped.startswith("[Error] Failed to download attachment"):
+            failure = FAILURE_PATTERN.match(stripped)
+            if failure:
+                self.failures.append(
+                    {
+                        "postUrl": self._post_url,
+                        "fileUrl": failure.group("url"),
+                        "attempt": int(failure.group("attempt")),
+                        "total": int(failure.group("total")),
+                        "message": failure.group("message").strip(),
+                        "time": time.time(),
+                    }
+                )
         self._refresh_totals()
         return False
 
@@ -402,6 +438,7 @@ class Job:
             "startedAt": self.started_at,
             "finishedAt": self.finished_at,
             "progress": dict(self.progress),
+            "failures": list(self.failures),
             "lineCount": self.dropped + len(self.lines),
             "config": self.config,
             "command": shell_command(self.argv),
@@ -564,6 +601,10 @@ class JobManager:
             job.finish_progress(success=False)
             job.append(f"[gui] 进程退出码 {process.returncode}")
 
+        records = parse_post_records(job.lines)
+        if records:
+            append_history(records)
+
 
 # --------------------------------------------------------------------------- #
 # HTTP layer
@@ -580,6 +621,204 @@ class AppState:
 
 
 STATE: AppState | None = None
+
+
+# --------------------------------------------------------------------------- #
+# download history — which posts came from which creator, and when
+# --------------------------------------------------------------------------- #
+def _history_path() -> Path:
+    """Absolute path of the JSONL history file (creates its folder)."""
+    global APP_DATA, HISTORY_FILE
+    APP_DATA = ensure_dir(APP_DATA)
+    HISTORY_FILE = APP_DATA / "history.jsonl"
+    return HISTORY_FILE
+
+
+def parse_post_records(lines: list[str]) -> list[dict[str, Any]]:
+    """Group CLI output into one record per post.
+
+    ``kemono_dl`` prints ``[downloading] Post URL:`` before each post, so every
+    later ``Post:`` / ``Destination:`` / ``[skip]`` / ``[Error]`` line belongs to
+    the most recent post URL.
+    """
+    records: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+
+    for raw in lines:
+        line = raw.strip()
+        match = POST_URL_PATTERN.match(line)
+        if match:
+            site = match.group("site")
+            service = match.group("service")
+            creator = match.group("creator")
+            post = match.group("post")
+            current = {
+                "site": site,
+                "service": service,
+                "creatorId": creator,
+                "postId": post,
+                "url": f"https://{site}/{service}/user/{creator}/post/{post}",
+                "title": "",
+                "files": 0,
+                "skipped": 0,
+                "failures": 0,
+                "errors": [],
+            }
+            records.append(current)
+            continue
+
+        if current is None:
+            continue
+
+        if line.startswith("[downloading] Post:"):
+            title = POST_TITLE_PATTERN.match(line)
+            if title:
+                current["title"] = title.group("title").strip()
+        elif line.startswith("[downloading] Destination:"):
+            current["files"] += 1
+        elif line.startswith("[skip]"):
+            current["skipped"] += 1
+        else:
+            failure = FAILURE_PATTERN.match(line)
+            if failure:
+                current["failures"] += 1
+                current["errors"].append(failure.group("message").strip())
+
+    return records
+
+
+def append_history(records: list[dict[str, Any]]) -> int:
+    """Append one JSON line per post; returns how many were written."""
+    if not records:
+        return 0
+    path = _history_path()
+    stamp = time.time()
+    try:
+        with path.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps({**record, "ts": stamp}, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        safe_print(f"[gui] 无法写入下载记录：{exc}")
+        return 0
+    return len(records)
+
+
+def load_history() -> list[dict[str, Any]]:
+    """Read the JSONL history, keeping the newest entry per post."""
+    path = _history_path()
+    newest: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for raw in handle:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    record = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                key = (
+                    str(record.get("site", "")),
+                    str(record.get("service", "")),
+                    str(record.get("creatorId", "")),
+                    str(record.get("postId", "")),
+                )
+                if not all(key):
+                    continue
+                previous = newest.get(key)
+                if previous is None or float(record.get("ts", 0)) >= float(previous.get("ts", 0)):
+                    newest[key] = record
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        safe_print(f"[gui] 无法读取下载记录：{exc}")
+        return []
+    return sorted(newest.values(), key=lambda item: float(item.get("ts", 0)), reverse=True)
+
+
+def history_summary() -> dict[str, Any]:
+    """Group the history by creator so the UI can answer “谁更新了？”."""
+    records = load_history()
+    creators: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for record in records:
+        key = (
+            str(record.get("site", "")),
+            str(record.get("service", "")),
+            str(record.get("creatorId", "")),
+        )
+        entry = creators.get(key)
+        if entry is None:
+            entry = {
+                "site": key[0],
+                "service": key[1],
+                "creatorId": key[2],
+                "key": "/".join(part for part in key if part),
+                "posts": 0,
+                "files": 0,
+                "skipped": 0,
+                "failures": 0,
+                "firstTs": float(record.get("ts", 0)),
+                "lastTs": 0.0,
+                "latest": None,
+            }
+            creators[key] = entry
+        entry["posts"] += 1
+        entry["files"] += int(record.get("files", 0))
+        entry["skipped"] += int(record.get("skipped", 0))
+        entry["failures"] += int(record.get("failures", 0))
+        stamp = float(record.get("ts", 0))
+        entry["firstTs"] = min(entry["firstTs"], stamp)
+        if stamp >= entry["lastTs"]:
+            entry["lastTs"] = stamp
+            entry["latest"] = {
+                "postId": record.get("postId", ""),
+                "title": record.get("title", ""),
+                "url": record.get("url", ""),
+                "ts": stamp,
+                "failures": int(record.get("failures", 0)),
+            }
+    ordered = sorted(creators.values(), key=lambda item: item["lastTs"], reverse=True)
+    return {
+        "path": str(_history_path()),
+        "posts": len(records),
+        "creators": ordered,
+    }
+
+
+def history_csv() -> str:
+    """Render the history as CSV (UTF-8 with BOM so Excel keeps 中文)."""
+    records = load_history()
+    buffer = io.StringIO()
+    buffer.write("\ufeff时间,站点,服务,作者,帖子ID,标题,帖子链接,文件数,跳过,失败,错误\n")
+    writer = csv.writer(buffer)
+    for record in records:
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(record.get("ts", 0))))
+        writer.writerow(
+            [
+                stamp,
+                record.get("site", ""),
+                record.get("service", ""),
+                record.get("creatorId", ""),
+                record.get("postId", ""),
+                record.get("title", ""),
+                record.get("url", ""),
+                record.get("files", 0),
+                record.get("skipped", 0),
+                record.get("failures", 0),
+                " | ".join(record.get("errors", []) or []),
+            ]
+        )
+    return buffer.getvalue()
+
+
+def clear_history() -> None:
+    path = _history_path()
+    try:
+        path.write_text("", encoding="utf-8")
+    except OSError as exc:
+        safe_print(f"[gui] 无法清空下载记录：{exc}")
 
 
 def build_job_argument(config: dict[str, Any]) -> tuple[list[str], list[str], list[str], str]:
@@ -683,6 +922,17 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/fs":
                 if self._authorised():
                     self._json(self._fs(query))
+            elif route == "/api/history":
+                if self._authorised():
+                    self._json(history_summary())
+            elif route == "/api/history/export":
+                if self._authorised():
+                    self._send(
+                        HTTPStatus.OK,
+                        history_csv().encode("utf-8"),
+                        "text/csv; charset=utf-8",
+                        {"Content-Disposition": 'attachment; filename="kemono-dl-history.csv"'},
+                    )
             else:
                 self._error("not found", HTTPStatus.NOT_FOUND)
         except BrokenPipeError:
@@ -707,6 +957,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/open": self._open_folder,
                 "/api/install-deps": self._install_deps,
                 "/api/clear": self._clear,
+                "/api/history/clear": self._history_clear,
                 "/api/quit": self._quit,
             }
             handler = handlers.get(route)
@@ -984,6 +1235,10 @@ class Handler(BaseHTTPRequestHandler):
                     STATE.manager.jobs.pop(job_id, None)
             STATE.manager.order = [job_id for job_id in STATE.manager.order if job_id in STATE.manager.jobs]
         self._json({"ok": True})
+
+    def _history_clear(self, payload: dict[str, Any]) -> None:
+        clear_history()
+        self._json({"ok": True, "history": history_summary()})
 
 
 class Server(ThreadingHTTPServer):

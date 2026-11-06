@@ -188,6 +188,7 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 | 日期类型 `added:` / `edited:` / `published:` | 每行的类型下拉框 | 默认 `published`，界面会拼成 `published:20240506` 这样的形式 |
 | `--skip-extensions EXTs` | 「过滤」→ 跳过扩展名 | 输入框回车/逗号添加成标签，最终拼成逗号分隔列表 |
 | `--skip-attachments` | 「过滤」→ 跳过附件 | 只写正文 / JSON 时用 |
+| `--request-interval SECONDS` | 「保存位置」→ 请求间隔 | 每次向文件服务器请求前等待的秒数，默认 `1`；`0` 表示不限速 |
 | `--write-content` | 「保存位置」→ 保存正文 | 把帖子正文写成 HTML |
 | `--write-json` | 「保存位置」→ 保存 JSON | 把帖子 API 响应写成 JSON |
 | `--archive FILE` | 「过滤」→ 归档文件 | 增量下载：记录已下载帖子，下次自动跳过 |
@@ -285,6 +286,54 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 > 界面不会自己实现下载逻辑，也不会改写 CLI 的输出，因此日志就是原版
 > `kemono-dl` 的日志，排查问题时可以直接对照。
 
+### 请求限速（`--request-interval`）
+
+pawchive 的文件服务器（前面挂了 DDoS-Guard）在它的拦截页里写明了要求：
+
+> no more than 1 request per second, and 5 active downloads …
+
+所以下载器默认在**每次向文件服务器发请求之前**等待 1 秒（这个等待只影响同一时刻的
+请求节奏，不影响并发以外的东西，也不会拖慢 GUI 本身）。界面上：
+
+* 「设置 → 专业模式 → 保存位置 → 请求间隔（秒）」，默认 `1`，范围 `0`–`60`；
+* 填 `0` 就完全不等待（只建议在自建镜像或本地测试时用）；
+* 只有真正发请求时才会计时：全新下载一个文件只发一次请求，不会为了「探测大小」多发一次；
+* 命令行等价物就是 `--request-interval 1.5`。
+
+### 下载记录与「作者更新对比」
+
+每次任务结束（正常结束或失败退出都算），GUI 会把任务日志里每个帖子整理成一条记录，
+追加到 `%LOCALAPPDATA%\kemono-dl-gui\history.jsonl`（便携版 / Docker 用
+`KEMONO_DL_GUI_DATA` 指向的目录）。
+
+左侧「下载记录」按钮打开面板，按**「站点 / 服务 / 作者」**汇总：
+
+| 列 | 含义 |
+| --- | --- |
+| 作者 | `站点/服务/作者ID`，例如 `kemono.cr/patreon/12345` |
+| 帖子 | 这个作者一共下载过几篇帖子（同一篇帖子重复下载只算最新一条） |
+| 最近下载 | 最后一次下载这篇作者的时间 |
+| 最新帖子 | 最近一篇下载过的帖子标题，点进去就是帖子页面 |
+
+面板底部：
+
+* **导出 CSV**：UTF-8 带 BOM，Excel 打开中文不乱码，列含「时间 / 站点 / 服务 / 作者 /
+  帖子ID / 标题 / 帖子链接 / 文件数 / 跳过 / 失败 / 错误」；
+* **清空记录**：只删记录文件，已下载的文件不动。
+
+用法上最实用的一条：隔一段时间重新跑同一个作者页，再打开下载记录对比「帖子」列涨了多少、
+「最新帖子」是什么，就知道作者这段时间更新了什么。
+
+### 下载失败的文件怎么找回来
+
+任务详情里有一块**失败清单**：按帖子分组，每条都带**可点击的帖子链接**（不是文件链接，
+因为文件 404 时点文件没有意义）和失败原因（例如 `404 Client Error: Not Found · 第 3/3 次`）。
+清单右上角可以一键复制所有失败帖子的链接，粘贴到浏览器里逐篇重试。
+
+任务跑完如果有失败，界面右上角还会弹一次提醒（只弹一次）。重试次数仍是 CLI 默认的 3 次：
+pawchive 上确实存在「帖子记录还在、文件已经被删」的情况，重试解决不了，但保留重试
+才不会误伤网络抖动。
+
 ---
 
 ## 构建便携版 exe
@@ -366,10 +415,11 @@ git push -u origin main
 | `python tools/verify_exe.py` | 启动已打包的 `dist/kemono-dl-gui.exe`，检查冻结模式、内置依赖、静态资源与退出流程（CI 用）；设 `KEMONO_DL_GUI_EXE` 可指向别处的 exe 副本 |
 | `python tools/check_exe_bundle.py` | 不启动 exe，直接解析 PyInstaller 归档：内置解释器、MSVC 运行库、SSL、CA 证书、前端资源、`--run-cli` 自调用路径是否都在包里 |
 | `python tools/check_ui.py` | 检查 `app.js` 里用到的每个元素 id 是否都在 `index.html` 中存在 |
-| `python -m unittest tests.test_gui_args` | 18 个单元测试，逐项核对界面控件与 CLI 参数的映射 |
+| `python -m unittest tests.test_gui_args` | 24 个单元测试，逐项核对界面控件与 CLI 参数的映射（含 `--request-interval`） |
 | `python -m unittest tests.test_gui_streams` | 5 个单元测试，保证日志管道强制 UTF-8 且不做块缓冲（日文标题不崩、进度不延迟） |
-| `python -m unittest tests.test_gui_server` | 18 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量）与进度行解析 |
+| `python -m unittest tests.test_gui_server` | 25 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量）、进度行解析、失败清单与下载记录（分组 / 去重 / CSV / 清空） |
 | `python -m unittest tests.test_downloader_progress` | 2 个单元测试，确认 stdout 是管道时仍逐块输出 `\r` 进度（进度条不再停在 0%） |
+| `python -m unittest tests.test_downloader_throttle` | 9 个单元测试，核对请求限速：默认 1 秒、0 关闭、NaN/负数兜底，以及全新下载不额外发探测请求 |
 | `python -m unittest tests.test_downloader_resume` | 13 个单元测试，覆盖断点续传（`Range` 续传、服务端忽略 Range、416、截断保留 `.tmp`）与「跳过已下载」的各种判定 |
 | `python -m unittest tests.test_gui_modes` | 12 个静态断言，保证简单模式默认收起高级选项、专业模式开关与「用帖子标题命名」接线完整 |
 | `python tools/docker_test.py` | 以 `0.0.0.0` + 密码模式启动，验证 `/healthz`、401/200、令牌与退出 |
@@ -463,3 +513,13 @@ token（`X-GUI-Token`），别的网页无法调用你的下载接口。
 **配置存在哪？**
 界面配置在浏览器 localStorage；上传的 cookies / 批次文件副本与自定义变量
 放在 `%LOCALAPPDATA%\kemono-dl-gui\`（可用环境变量 `KEMONO_DL_GUI_DATA` 改）。
+
+**限速会不会让下载变得很慢？**
+每个文件最多多等 1 秒，且只作用于文件服务器请求；一个 20 个附件的帖子大约多花 20 秒。
+换来的是不触发 pawchive 的 DDoS-Guard 封禁（403）。如果你的网络完全没问题、
+又很在意速度，可以在「设置 → 专业模式 → 保存位置 → 请求间隔」把 1 改成 0.5 或 0。
+
+**下载记录会不会越来越大？**
+同一篇帖子只会保留最新一条（按「站点 + 服务 + 作者 + 帖子」去重），所以文件规模跟着
+「下载过的帖子数」走，一条大约 300 字节；十万篇也就几十 MB，可以直接删掉
+`history.jsonl` 重置，或者在面板里点「清空记录」。

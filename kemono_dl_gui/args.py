@@ -123,6 +123,26 @@ def _list(value: Any) -> list[str]:
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
+#: Longest request delay the GUI accepts (seconds); anything above is nonsense.
+MAX_REQUEST_INTERVAL = 60.0
+
+
+def _interval(value: Any) -> float:
+    """Coerce the request delay into ``[0, MAX_REQUEST_INTERVAL]``.
+
+    ``None``/garbage falls back to ``1.0`` — the polite value pawchive asks for.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return 1.0
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return 1.0
+    if seconds != seconds:  # NaN
+        return 1.0
+    return max(0.0, min(MAX_REQUEST_INTERVAL, seconds))
+
+
 def normalise_config(config: dict[str, Any], default_path: str) -> dict[str, Any]:
     """Coerce an incoming JSON body into a predictable configuration object."""
     templates_in = config.get("templates") or {}
@@ -167,6 +187,7 @@ def normalise_config(config: dict[str, Any], default_path: str) -> dict[str, Any
         "dates": dates,
         "skip_extensions": [ext.strip().lstrip(".") for ext in _list(config.get("skipExtensions")) if ext.strip().lstrip(".")],
         "skip_attachments": _bool(config.get("skipAttachments")),
+        "request_interval": _interval(config.get("requestInterval")),
         "cookies": _list(config.get("cookies")),
         "logins": logins,
         "favorite": favorite,
@@ -344,6 +365,8 @@ def build_command(
         argv.append("--write-content")
     if cfg["write_json"]:
         argv.append("--write-json")
+    if abs(cfg["request_interval"] - 1.0) > 1e-9:
+        argv += ["--request-interval", f"{cfg['request_interval']:g}"]
     if cfg["archive"]:
         if not os.path.isfile(cfg["archive"]):
             warnings.append(f"归档文件尚不存在，将自动创建：{cfg['archive']}")

@@ -7,12 +7,46 @@ from .utils import format_bytes
 #: Minimum delay between two progress repaints (seconds).
 PROGRESS_INTERVAL = 0.1
 
+#: Minimum delay between two requests to a file server (seconds, 0 = off).
+REQUEST_INTERVAL = 1.0
+#: Timestamp of the last file server request, used by :func:`_throttle`.
+_last_request = 0.0
+
 #: Returned when the local file was already complete and nothing was fetched.
 STATUS_SKIPPED = "skipped"
 #: Returned when an existing partial file was continued with a Range request.
 STATUS_RESUMED = "resumed"
 #: Returned when the file was downloaded from byte zero.
 STATUS_DOWNLOADED = "downloaded"
+
+
+def set_request_interval(seconds: float) -> None:
+    """Configure the global delay applied before every file server request.
+
+    Pawchive's file host (DDoS-Guard) answers with ``403`` when it sees more
+    than about one request per second, so the default is deliberately polite.
+    """
+    global REQUEST_INTERVAL
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        value = 1.0
+    if value != value:  # NaN
+        value = 1.0
+    REQUEST_INTERVAL = max(0.0, value)
+
+
+def _throttle() -> None:
+    """Sleep just enough to keep ``REQUEST_INTERVAL`` between two requests."""
+    global _last_request
+    if REQUEST_INTERVAL <= 0:
+        return
+    now = time.monotonic()
+    wait = _last_request + REQUEST_INTERVAL - now
+    if wait > 0:
+        time.sleep(wait)
+        now = time.monotonic()
+    _last_request = now
 
 
 def get_remote_size(session: CustomSession, url: str, timeout: int = 30) -> int:
@@ -22,6 +56,7 @@ def get_remote_size(session: CustomSession, url: str, timeout: int = 30) -> int:
     caller falls back to unknown-size behaviour instead of guessing.
     """
     try:
+        _throttle()
         with session.head(url, allow_redirects=True, timeout=timeout) as response:
             if getattr(response, "ok", True):
                 size = int(response.headers.get("content-length") or 0)
@@ -85,10 +120,16 @@ def download_file(
     print(f"[downloading] Source: {url!r}")
     print(f"[downloading] Destination: {filepath!r}")
 
-    remote_size = 0 if overwrite else get_remote_size(session, url)
-    final_size = os.path.getsize(filepath) if os.path.exists(filepath) else -1
     temp_filepath = filepath + ".tmp" if temp_file else filepath
+    final_size = os.path.getsize(filepath) if os.path.exists(filepath) else -1
     temp_size = os.path.getsize(temp_filepath) if os.path.exists(temp_filepath) else -1
+
+    # Only ask the server for its size when there is something local to compare
+    # against: a fresh download learns the size from the GET response anyway, and
+    # skipping the probe halves the request count (which matters for the 1 req/s
+    # politeness limit of the pawchive file host).
+    has_local = final_size >= 0 or temp_size >= 0
+    remote_size = 0 if (overwrite or not has_local) else get_remote_size(session, url)
 
     if overwrite and temp_file and temp_size >= 0:
         os.remove(temp_filepath)
@@ -133,7 +174,9 @@ def download_file(
     started = time.time()
     progress = ""
     last_report = 0.0
+    expected_size = remote_size or 0
 
+    _throttle()
     with session.get(
         url, stream=True, allow_redirects=True, headers=headers, timeout=60
     ) as response:
@@ -162,7 +205,9 @@ def download_file(
 
         response.raise_for_status()
 
-        total_size = remote_size or (int(response.headers.get("content-length") or 0) + downloaded)
+        content_length = int(response.headers.get("content-length") or 0)
+        total_size = remote_size or (content_length + downloaded)
+        expected_size = total_size or 0
         started = time.time()
 
         with open(temp_filepath, mode) as f:
@@ -184,10 +229,10 @@ def download_file(
         print(progress.ljust(100), flush=True)
 
     actual_size = os.path.getsize(temp_filepath)
-    if remote_size and actual_size != remote_size:
+    if expected_size and actual_size != expected_size:
         raise IOError(
             f"incomplete download: got {format_bytes(actual_size)} of "
-            f"{format_bytes(remote_size)}, keeping {os.path.basename(temp_filepath)!r} for resume"
+            f"{format_bytes(expected_size)}, keeping {os.path.basename(temp_filepath)!r} for resume"
         )
 
     if temp_file:

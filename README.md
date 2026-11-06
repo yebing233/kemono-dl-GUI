@@ -72,6 +72,14 @@ visible: values set in pro mode keep applying after you switch back to simple.
   (2 s → 4 s → 8 s … capped at 30 s) and resume from the same offset. Only
   `--no-tmp` disables resume — size/hash skipping still applies. Skipped files
   are logged in light blue and counted as **· 跳过 N** in the job panel.
+* **Polite by default, never silently lossy** — file server requests are spaced
+  by `--request-interval` (default 1 s) because pawchive's host asks for
+  "no more than 1 request per second"; failures keep the CLI's 3 retries and are
+  then listed per post with a clickable link to that post, plus a one-time
+  toast. Every finished run appends a per-post line to
+  `%LOCALAPPDATA%\kemono-dl-gui\history.jsonl`, and the 下载记录 panel groups it
+  by site/service/author with an "latest post" column and CSV export — run the
+  same author page later and compare to see what they added.
 
 The CLI stays the single source of truth: each download is a real `kemono-dl`
 subprocess, the log pane shows its untouched output, and the bottom bar shows the

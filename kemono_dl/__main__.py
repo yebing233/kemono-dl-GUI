@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument("--restrict-names", action="store_true", help="Restrict output file to ASCII characters.")
     parser.add_argument("--custom-template-variables", type=str, help="Path to a json file with your custom template variables")
     parser.add_argument("--no-tmp", action="store_true", help="Do not use .tmp files. Write directly into the output file.")
+    parser.add_argument("--request-interval", type=float, default=1.0, metavar="SECONDS", help="Minimum delay between two file server requests. Default 1.0, use 0 to disable.")
     # Filters
     parser.add_argument("--archive", metavar="FILE", type=str, help="Path to archive file containing a list of post urls")
     parser.add_argument("--date", metavar="[Type:]DATE", type=str, help="Download only posts uploaded on this date. Format 'YYYYMMDD'")
@@ -130,6 +131,7 @@ def main() -> None:
         write_content=args.write_content,
         write_json=args.write_json,
         no_tmp=args.no_tmp,
+        request_interval=args.request_interval,
     )
 
     if args.cookies:

@@ -58,6 +58,7 @@ const APP = {
   fsSelectedFile: null,
   fsCallback: null,
   running: false,
+  jobFailures: [],
   mode: 'simple',
 };
 
@@ -81,6 +82,10 @@ async function api(path, body) {
     throw error;
   }
   return data;
+}
+
+async function apiRaw(path) {
+  return fetch(path, { headers: { 'X-GUI-Token': TOKEN } });
 }
 
 function debounce(fn, wait) {
@@ -160,6 +165,7 @@ function defaultConfig() {
     },
     skipExtensions: [],
     skipAttachments: false,
+    requestInterval: 1,
     cookies: [],
     logins: {
       kemono: { user: '', password: '' },
@@ -195,6 +201,14 @@ const saveConfig = debounce(() => {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collect())); } catch { /* quota */ }
 }, 400);
 
+function intervalValue() {
+  const raw = $('requestInterval').value.trim();
+  if (raw === '') return 1;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) return 1;
+  return Math.min(60, value);
+}
+
 function collect() {
   return {
     urls: $('urls').value,
@@ -219,6 +233,7 @@ function collect() {
     },
     skipExtensions: [...APP.lists.skipExtensions],
     skipAttachments: $('swSkipAttachments').checked,
+    requestInterval: intervalValue(),
     cookies: [...APP.lists.cookies],
     logins: {
       kemono: { user: $('kemonoUser').value.trim(), password: $('kemonoPass').value },
@@ -258,6 +273,7 @@ function applyConfig(cfg) {
   $('swWriteContent').checked = !!cfg.writeContent;
   $('swWriteJson').checked = !!cfg.writeJson;
   $('swSkipAttachments').checked = !!cfg.skipAttachments;
+  $('requestInterval').value = cfg.requestInterval === undefined ? 1 : cfg.requestInterval;
   $('customVars').value = cfg.customVars || '';
   $('archivePath').value = cfg.archive || '';
   APP.lists.batchFiles = [...cfg.batchFiles];
@@ -825,6 +841,59 @@ function renderSelectedJob(job) {
 
   $('btnStop').disabled = !(job.status === 'running' || job.status === 'queued');
   $('btnRetry').disabled = !(job.status === 'failed' || job.status === 'stopped' || job.status === 'done');
+
+  renderFailures(job.failures || []);
+}
+
+/**
+ * 失败的附件连同「它属于哪个帖子」一起列出来。
+ * 只给文件链接没用 —— 用户要能点回帖子，才知道是哪一篇没下全。
+ */
+function renderFailures(failures) {
+  APP.jobFailures = failures;
+  const block = $('failureBlock');
+  block.hidden = failures.length === 0;
+  if (!failures.length) return;
+  $('failureCount').textContent = failures.length;
+
+  const list = $('failureList');
+  list.textContent = '';
+  const grouped = new Map();
+  for (const item of failures) {
+    const key = item.postUrl || '';
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(item);
+  }
+  for (const [postUrl, items] of grouped) {
+    const li = document.createElement('li');
+    const head = document.createElement('div');
+    head.className = 'failure-post';
+    if (postUrl) {
+      const link = document.createElement('a');
+      link.href = postUrl;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      link.textContent = postUrl;
+      link.title = '打开帖子页面';
+      head.append(link);
+    } else {
+      head.append(document.createTextNode('（未知帖子）'));
+    }
+    li.append(head);
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'failure-file';
+      const name = item.fileUrl ? item.fileUrl.split('f=').pop() : '';
+      const label = document.createElement('span');
+      label.textContent = name ? decodeURIComponent(name) : item.fileUrl || '—';
+      label.title = item.fileUrl || '';
+      const why = document.createElement('em');
+      why.textContent = `${item.message || '失败'} · 第 ${item.attempt || 1}/${item.total || 1} 次`;
+      row.append(label, why);
+      li.append(row);
+    }
+    list.append(li);
+  }
 }
 
 /* ── log ──────────────────────────────────────────────────── */
@@ -918,6 +987,7 @@ async function tick() {
   }
   if (job) {
     renderSelectedJob(job);
+    announceFailures(job);
     if (typeof data.base === 'number') {
       APP.since = data.base + (data.lines ? data.lines.length : 0);
     }
@@ -935,6 +1005,19 @@ async function tick() {
 function schedulePoll(delay) {
   clearTimeout(APP.pollTimer);
   APP.pollTimer = setTimeout(tick, delay);
+}
+
+/**
+ * 任务结束后如果还有失败的文件，主动提示一次，并把失败清单亮出来。
+ * 只提示一次，避免每次轮询都弹。
+ */
+function announceFailures(job) {
+  const count = (job.failures || []).length;
+  const finished = job.status === 'done' || job.status === 'failed';
+  if (!count || !finished) return;
+  if (APP.announcedFailures === job.id) return;
+  APP.announcedFailures = job.id;
+  toast(`${count} 个文件下载失败，已在任务详情里列出对应帖子链接`, 'warn');
 }
 
 /* ── filesystem picker ────────────────────────────────────── */
@@ -1067,7 +1150,125 @@ function openAbout() {
 function closeModals() {
   $('aboutModal').hidden = true;
   $('settingsModal').hidden = true;
+  $('historyModal').hidden = true;
   closeFsModal();
+}
+
+/* ── download history ─────────────────────────────────────── */
+
+function formatStamp(seconds) {
+  if (!seconds) return '—';
+  const date = new Date(seconds * 1000);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function renderHistory(data) {
+  const rows = $('historyRows');
+  rows.textContent = '';
+  const creators = (data && data.creators) || [];
+  $('historyEmpty').hidden = creators.length > 0;
+  $('historySummary').textContent = creators.length
+    ? `${creators.length} 位作者 · ${data.posts} 篇帖子`
+    : '';
+  $('historyPath').textContent = data && data.path ? `记录文件：${data.path}` : '';
+
+  for (const creator of creators) {
+    const tr = document.createElement('tr');
+
+    const author = document.createElement('td');
+    const name = document.createElement('b');
+    name.textContent = creator.creatorId;
+    const site = document.createElement('em');
+    site.className = 'muted';
+    site.textContent = [creator.site, creator.service].filter(Boolean).join(' · ');
+    author.append(name, document.createElement('br'), site);
+
+    const posts = document.createElement('td');
+    posts.textContent = String(creator.posts);
+    if (creator.failures) {
+      const bad = document.createElement('em');
+      bad.className = 'muted';
+      bad.textContent = ` · ${creator.failures} 失败`;
+      posts.append(bad);
+    }
+
+    const last = document.createElement('td');
+    last.textContent = formatStamp(creator.lastTs);
+
+    const latest = document.createElement('td');
+    if (creator.latest && creator.latest.url) {
+      const link = document.createElement('a');
+      link.href = creator.latest.url;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      link.textContent = creator.latest.title || creator.latest.postId || '帖子';
+      link.title = creator.latest.url;
+      latest.append(link);
+    } else {
+      latest.textContent = '—';
+    }
+
+    tr.append(author, posts, last, latest);
+    rows.append(tr);
+  }
+}
+
+function refreshHistory() {
+  return api('/api/history')
+    .then(renderHistory)
+    .catch((error) => toast(`下载记录读取失败：${error.message}`, 'error'));
+}
+
+function openHistory() {
+  $('historyModal').hidden = false;
+  refreshHistory();
+}
+
+function exportHistory() {
+  apiRaw('/api/history/export')
+    .then((response) => {
+      if (!response.ok) throw new Error(`导出失败 (HTTP ${response.status})`);
+      return response.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'kemono-dl-history.csv';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      toast('已导出 CSV', 'ok');
+    })
+    .catch((error) => toast(`导出失败：${error.message}`, 'error'));
+}
+
+function clearHistory() {
+  if (!window.confirm('清空下载记录？只删除记录，已下载的文件不受影响。')) return;
+  api('/api/history/clear', {})
+    .then((data) => {
+      renderHistory(data.history || { creators: [], posts: 0 });
+      toast('下载记录已清空', 'ok');
+    })
+    .catch((error) => toast(`清空失败：${error.message}`, 'error'));
+}
+
+function copyFailures() {
+  const failures = APP.jobFailures || [];
+  if (!failures.length) return;
+  const lines = [];
+  const seen = new Set();
+  for (const item of failures) {
+    const key = item.postUrl || item.fileUrl;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push(item.postUrl || '(未知帖子)');
+  }
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => toast(`已复制 ${lines.length} 条帖子链接`, 'ok'))
+    .catch(() => toast('复制失败，请手动选择链接', 'error'));
 }
 
 function quitApp() {
@@ -1181,7 +1382,7 @@ function openSettings() {
 function wireEvents() {
   const textIds = ['urls', 'outPath', 'templateInput', 'tAttachments', 'tContent', 'tJson',
     'customVars', 'archivePath', 'kemonoUser', 'kemonoPass', 'coomerUser', 'coomerPass',
-    'pawchiveUser', 'pawchivePass'];
+    'pawchiveUser', 'pawchivePass', 'requestInterval'];
   for (const id of textIds) {
     const el = $(id);
     el.addEventListener('input', () => {
@@ -1340,6 +1541,10 @@ function wireEvents() {
   });
 
   $('openAbout').addEventListener('click', openAbout);
+  $('openHistory').addEventListener('click', openHistory);
+  $('btnHistoryExport').addEventListener('click', exportHistory);
+  $('btnHistoryClear').addEventListener('click', clearHistory);
+  $('btnCopyFailures').addEventListener('click', copyFailures);
   $('toggleTheme').addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   });
