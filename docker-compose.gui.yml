@@ -1,0 +1,34 @@
+# kemono-dl GUI in Docker:
+#
+#   docker compose -f docker-compose.gui.yml up -d --build
+#   # open http://127.0.0.1:8765/
+#
+# Downloads land in ./downloads on the host; the app data volume keeps uploaded
+# cookies / batch files / custom template variables between restarts.
+services:
+  gui:
+    build:
+      context: .
+      dockerfile: Dockerfile.gui
+    image: kemono-dl-gui:latest
+    container_name: kemono-dl-gui
+    ports:
+      # Bind to loopback by default. Change to "8765:8765" only together with
+      # KEMONO_DL_GUI_PASSWORD below, otherwise anyone on the network can download.
+      - "127.0.0.1:8765:8765"
+    environment:
+      KEMONO_DL_GUI_DATA: /data
+      KEMONO_DL_GUI_DOWNLOAD_DIR: /downloads
+      KEMONO_DL_GUI_HOST: 0.0.0.0
+      KEMONO_DL_GUI_PORT: "8765"
+      KEMONO_DL_GUI_NO_BROWSER: "1"
+      # Uncomment to protect the UI with HTTP Basic auth (username is ignored):
+      # KEMONO_DL_GUI_PASSWORD: change-me
+      TZ: Asia/Shanghai
+    volumes:
+      - ./downloads:/downloads
+      - gui-data:/data
+    restart: unless-stopped
+
+volumes:
+  gui-data:

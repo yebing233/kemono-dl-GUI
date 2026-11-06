@@ -1,14 +1,18 @@
 """Local web server that powers the kemono-dl GUI.
 
-The server only listens on the loopback interface and requires a per-session
-token for every API call, so nothing on the network (or another web page) can
-drive downloads.  It never re-implements the downloader: each job is a real
-``python -m kemono_dl`` subprocess, therefore every CLI option keeps its exact
-behaviour.
+By default the server only listens on the loopback interface and requires a
+per-session token for every API call, so nothing on the network (or another web
+page) can drive downloads.  When it is deployed behind a port mapping (Docker,
+a NAS, a remote box) start it with ``--host 0.0.0.0`` and set
+``KEMONO_DL_GUI_PASSWORD`` so the whole UI sits behind HTTP Basic auth.
+It never re-implements the downloader: each job is a real ``python -m kemono_dl``
+subprocess, therefore every CLI option keeps its exact behaviour.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import mimetypes
 import os
@@ -74,6 +78,11 @@ APP_DATA = app_data_dir()
 UPLOAD_DIR = APP_DATA / "uploads"
 CUSTOM_VARS_FILE = APP_DATA / "custom-template-variables.json"
 
+#: Environment variables used by the Docker image / remote deployments.
+DATA_ENV = "KEMONO_DL_GUI_DATA"
+DOWNLOAD_DIR_ENV = "KEMONO_DL_GUI_DOWNLOAD_DIR"
+PASSWORD_ENV = "KEMONO_DL_GUI_PASSWORD"
+
 MAX_LOG_LINES = 20000
 PROGRESS_PATTERN = re.compile(
     r"^\[downloading\]\s+(?P<percent>\d+(?:\.\d+)?)% of (?P<total>[\d.]+ \w+) eta (?P<eta>[\d:]+) at (?P<speed>[\d.]+ \w+/s)"
@@ -99,9 +108,44 @@ def read_version() -> str:
         return "unknown"
 
 
+def auth_password() -> str:
+    """Optional HTTP Basic password guarding the whole UI (Docker / remote boxes)."""
+    return os.environ.get(PASSWORD_ENV, "").strip()
+
+
+def basic_auth_ok(header: str, password: str) -> bool:
+    """Check an ``Authorization: Basic …`` header against ``password``.
+
+    The username is ignored (any value works); only the secret is compared, in
+    constant time.  An empty ``password`` disables the check entirely.
+    """
+    if not password:
+        return True
+    scheme, _, encoded = (header or "").strip().partition(" ")
+    if scheme.lower() != "basic" or not encoded.strip():
+        return False
+    try:
+        decoded = base64.b64decode(encoded.strip(), validate=True).decode("utf-8", "replace")
+    except (binascii.Error, ValueError):
+        return False
+    return secrets.compare_digest(decoded.partition(":")[2], password)
+
+
 def default_download_path() -> str:
+    override = os.environ.get(DOWNLOAD_DIR_ENV)
+    if override:
+        return str(Path(override).expanduser())
     downloads = Path.home() / "Downloads"
     return str(downloads / "kemono-dl")
+
+
+def gui_version() -> str:
+    """Version of the GUI package itself (shown in the About panel)."""
+    try:
+        from . import __version__ as version
+    except ImportError:  # pragma: no cover - packaging edge case
+        return "unknown"
+    return version
 
 
 def has_requests(python_exe: str) -> bool:
@@ -459,6 +503,19 @@ class Handler(BaseHTTPRequestHandler):
         self._error("unauthorised", HTTPStatus.UNAUTHORIZED)
         return False
 
+    def _password_ok(self) -> bool:
+        """HTTP Basic gate, active only when ``KEMONO_DL_GUI_PASSWORD`` is set."""
+        password = auth_password()
+        if basic_auth_ok(self.headers.get("Authorization") or "", password):
+            return True
+        self._send(
+            HTTPStatus.UNAUTHORIZED,
+            "authentication required".encode("utf-8"),
+            "text/plain; charset=utf-8",
+            {"WWW-Authenticate": 'Basic realm="kemono-dl GUI", charset="UTF-8"'},
+        )
+        return False
+
     def _read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
@@ -479,7 +536,12 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed.query)
 
         try:
-            if route in {"/", "/index.html"}:
+            if route == "/healthz":
+                # Unauthenticated on purpose: container/orchestrator probes.
+                self._send(HTTPStatus.OK, b"ok", "text/plain; charset=utf-8")
+            elif not self._password_ok():
+                return
+            elif route in {"/", "/index.html"}:
                 self._serve_index()
             elif route.startswith("/static/"):
                 self._serve_static(route[len("/static/"):])
@@ -503,6 +565,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib signature
         route = urllib.parse.urlparse(self.path).path
+        if not self._password_ok():
+            return
         if not self._authorised():
             return
         try:
@@ -555,10 +619,11 @@ class Handler(BaseHTTPRequestHandler):
             "python": STATE.python,
             "pythonVersion": sys.version.split()[0],
             "appVersion": STATE.version,
-            "guiVersion": "1.0.0",
+            "guiVersion": gui_version(),
             "hasRequests": STATE.requests_ok,
             "frozen": FROZEN,
             "installable": not FROZEN,
+            "authRequired": bool(auth_password()),
             "defaultPath": STATE.default_path,
             "defaultTemplate": DEFAULT_TEMPLATE,
             "templateTypes": list(TEMPLATE_TYPES),
@@ -850,8 +915,15 @@ def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) ->
             raise
 
     actual_port = server.server_address[1]
-    url = f"http://{host}:{actual_port}/"
+    wildcard = host in {"0.0.0.0", "::", ""}
+    url = f"http://{'127.0.0.1' if wildcard else host}:{actual_port}/"
     safe_print(f"kemono-dl GUI · {url}")
+    if wildcard:
+        safe_print(f"监听所有网卡 {host}:{actual_port}（Docker / 远程访问）")
+    if auth_password():
+        safe_print("已启用访问密码（HTTP Basic），浏览器会弹窗要求登录")
+    elif wildcard:
+        safe_print("警告：当前没有访问密码，能连到这个端口的人都能操作下载；请设置 KEMONO_DL_GUI_PASSWORD")
     safe_print("按 Ctrl+C 结束服务")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

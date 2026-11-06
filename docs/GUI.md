@@ -5,11 +5,11 @@
 下载进程跑起来 —— 所以命令行有什么能力，界面就有同样的能力，输出、日志、行为
 完全一致。
 
-![界面结构](#界面结构) · [免安装使用](#方式一便携版推荐无需-python) · [源码运行](#方式二源码运行) · [功能对照表](#命令行参数--界面位置对照表)
+![界面结构](#界面结构) · [免安装使用](#方式一便携版推荐无需-python) · [源码运行](#方式二源码运行) · [Docker 部署](#方式四docker-部署服务器--nas--群晖) · [功能对照表](#命令行参数--界面位置对照表)
 
 ---
 
-## 三种打开方式
+## 四种打开方式
 
 ### 方式一：便携版（推荐，无需 Python）
 
@@ -40,9 +40,13 @@ Windows 用户也可以双击项目根目录的 `启动 GUI.bat`（脚本会自�
 
 | 参数 | 说明 |
 | --- | --- |
-| `--host` | 监听地址，默认 `127.0.0.1`（仅本机访问，不建议改） |
+| `--host` | 监听地址，默认 `127.0.0.1`（仅本机）；Docker / 远程部署用 `0.0.0.0` 并配合 `KEMONO_DL_GUI_PASSWORD` |
 | `--port` | 监听端口，默认 `8765`，写 `0` 表示自动挑一个空闲端口 |
 | `--no-browser` | 启动后不自动打开浏览器 |
+
+对应环境变量：`KEMONO_DL_GUI_HOST`、`KEMONO_DL_GUI_PORT`、`KEMONO_DL_GUI_NO_BROWSER=1`、
+`KEMONO_DL_GUI_PASSWORD`（HTTP Basic 访问密码）、`KEMONO_DL_GUI_DOWNLOAD_DIR`（默认保存位置）、
+`KEMONO_DL_GUI_DATA`（数据目录）。
 
 ### 方式三：pip 安装后使用命令
 
@@ -50,6 +54,58 @@ Windows 用户也可以双击项目根目录的 `启动 GUI.bat`（脚本会自�
 pip install .
 kemono-dl-gui        # 等同于 python -m kemono_dl_gui
 ```
+
+### 方式四：Docker 部署（服务器 / NAS / 群晖）
+
+镜像里已经装好 Python 和依赖，容器内以「无浏览器」模式跑网页界面，宿主机只要
+浏览器就能用：
+
+```bash
+# 方式 A：docker compose（推荐）
+docker compose -f docker-compose.gui.yml up -d --build
+# 然后打开 http://127.0.0.1:8765/
+
+# 方式 B：纯 docker
+docker build -f Dockerfile.gui -t kemono-dl-gui .
+docker run -d --name kemono-dl-gui \
+  -p 127.0.0.1:8765:8765 \
+  -v "$PWD/downloads:/downloads" \
+  -v kemono-gui-data:/data \
+  -e KEMONO_DL_GUI_PASSWORD=change-me \
+  --restart unless-stopped \
+  kemono-dl-gui
+```
+
+不想自己构建也可以直接用 GitHub Actions 产出的镜像（第一次用需要在仓库的
+Packages 页面把包改成 public）：
+
+```bash
+docker pull ghcr.io/yebing233/kemono-dl-gui:latest
+```
+
+容器用到的环境变量：
+
+| 变量 | 默认值（镜像内） | 说明 |
+| --- | --- | --- |
+| `KEMONO_DL_GUI_HOST` | `0.0.0.0` | 监听地址；容器内必须是 `0.0.0.0`，否则端口映射进不来 |
+| `KEMONO_DL_GUI_PORT` | `8765` | 监听端口 |
+| `KEMONO_DL_GUI_PASSWORD` | 空 | **强烈建议设置**。设置后整个界面走 HTTP Basic 认证（用户名随便填，密码填这个值）。想给局域网用就把端口映射改成 `"8765:8765"`，并且一定配上密码 |
+| `KEMONO_DL_GUI_DOWNLOAD_DIR` | `/downloads` | 界面「保存位置」的默认值 |
+| `KEMONO_DL_GUI_DATA` | `/data` | cookies / 批次文件 / 自定义模板变量的落盘位置 |
+| `KEMONO_DL_GUI_NO_BROWSER` | `1` | 不尝试打开浏览器（容器里没有桌面） |
+
+挂载点：`/downloads` 放下载结果，`/data` 放上传的 cookies、批次文件等；两个都建议
+挂宿主机目录，容器重建不丢数据。
+
+`GET /healthz` **不需要任何认证**，返回 `ok`，专门给 Docker healthcheck / 反向代理
+探活用。其余所有路径在没有密码时对「能连上端口的人」开放，所以：
+
+* 只在宿主机用 → 保持 `127.0.0.1:8765:8765`；
+* 要外网/局域网访问 → 必须设置 `KEMONO_DL_GUI_PASSWORD`，最好再套一层 HTTPS
+  （Nginx / Caddy 反代），因为 Basic 认证本身是明文传输的。
+
+> 容器里没有桌面环境，界面的「打开文件夹」按钮会提示失败，属正常现象；从宿主机
+> 的 `./downloads` 目录取文件即可。
 
 ---
 
@@ -204,6 +260,9 @@ CI 里跑的不只是「打包成功」，还包括 `tools/verify_exe.py`：它�
 | `python tools/check_exe_bundle.py` | 不启动 exe，直接解析 PyInstaller 归档：内置解释器、MSVC 运行库、SSL、CA 证书、前端资源、`--run-cli` 自调用路径是否都在包里 |
 | `python tools/check_ui.py` | 检查 `app.js` 里用到的每个元素 id 是否都在 `index.html` 中存在 |
 | `python -m unittest tests.test_gui_args` | 18 个单元测试，逐项核对界面控件与 CLI 参数的映射 |
+| `python -m unittest tests.test_gui_streams` | 4 个单元测试，保证日志管道强制 UTF-8（日文/土耳其文标题不再崩） |
+| `python -m unittest tests.test_gui_server` | 11 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量） |
+| `python tools/docker_test.py` | 以 `0.0.0.0` + 密码模式启动，验证 `/healthz`、401/200、令牌与退出 |
 | `python tools/fetch_wheels.py` | 手动下载 wheel（pip 不可用时的兜底） |
 
 ---
@@ -215,6 +274,14 @@ CI 里跑的不只是「打包成功」，还包括 `tools/verify_exe.py`：它�
 CPython 3.12 运行时、`requests`/`urllib3`/`certifi` 和 CA 证书。下载任务由
 exe 以 `kemono-dl-gui.exe --run-cli …` 再次调用自己执行，所以整条链路都不碰
 宿主机上的 Python。用 `python tools/check_exe_bundle.py` 可以从归档层面逐项验证。
+
+**日志里出现日文/韩文标题会乱码或报错吗？**
+不会。打包版是「无控制台」程序，PyInstaller 启动解释器时会忽略
+`PYTHONUTF8`/`PYTHONIOENCODING`，CPython 于是按系统 ANSI 代码页（简体中文是
+GBK）创建 `sys.stdout`，遇到 GBK 表示不了的字符（例如日文标题里的 `・` U+30FB）
+就会抛 `UnicodeEncodeError: 'gbk' codec can't encode character`。GUI 的 CLI 子进程
+启动时会把它重新配置为 UTF-8（`errors="replace"` 兜底），所以任何语言的标题都能
+安全写进右侧日志面板。回归测试见 `tests/test_gui_streams.py`。
 
 **端口被占用？**
 用 `python -m kemono_dl_gui --port 0`，会自动挑一个空闲端口；便携版重复双击会

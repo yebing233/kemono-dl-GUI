@@ -72,7 +72,7 @@ class KemonoDL:
 
     def load_archive_file(self) -> None:
         if self.archive_file and os.path.isfile(self.archive_file):
-            with open(self.archive_file, "r") as f:
+            with open(self.archive_file, "r", encoding="utf-8") as f:
                 self.archived_posts.extend(f"{parsed_url['service']}/user/{parsed_url['creator_id']}/post/{parsed_url['post_id']}" for line in f if (parsed_url := self.parse_url(line.strip())))
 
     def write_archive_file(self, domain: str, service: str, creator_id: str, post_id: str) -> None:
@@ -80,10 +80,10 @@ class KemonoDL:
         self.archived_posts.append(archive_data)
         if self.archive_file:
             if os.path.exists(self.archive_file):
-                with open(self.archive_file, "a") as f:
+                with open(self.archive_file, "a", encoding="utf-8") as f:
                     f.write(archive_data + "\n")
             else:
-                with open(self.archive_file, "w") as f:
+                with open(self.archive_file, "w", encoding="utf-8") as f:
                     f.write(archive_data + "\n")
 
     def parse_url(self, url) -> dict | None:

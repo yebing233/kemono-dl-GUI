@@ -48,6 +48,11 @@ filters, extension skipping, archive, cookies, per-site logins, `--write-content
   `windows-latest`, builds the exe, launches it for real (`tools/verify_exe.py`)
   and uploads it as the `kemono-dl-gui-windows-x64` artifact; released tags get
   the exe attached automatically. Trigger it from *Actions → Run workflow*.
+* **Docker** — `docker build -f Dockerfile.gui -t kemono-dl-gui .` (or
+  `docker compose -f docker-compose.gui.yml up -d --build`). The container serves
+  the same UI on port 8765 with `/downloads` and `/data` volumes. Set
+  `KEMONO_DL_GUI_PASSWORD` to put the whole UI behind HTTP Basic auth before you
+  publish the port; `GET /healthz` stays open for probes.
 
 The CLI stays the single source of truth: each download is a real `kemono-dl`
 subprocess, the log pane shows its untouched output, and the bottom bar shows the
@@ -56,7 +61,8 @@ reproduced in a terminal.
 
 The window is a browser tab served by a loopback-only server. Use **退出程序** in
 the left rail to stop it (closing the tab alone leaves the background process
-running). Everything is token-protected and bound to `127.0.0.1`.
+running). Everything is token-protected and bound to `127.0.0.1` by default; the
+Docker image starts it on `0.0.0.0` behind an optional password instead.
 
 Chinese guide with the option-by-option mapping: [docs/GUI.md](docs/GUI.md).
 

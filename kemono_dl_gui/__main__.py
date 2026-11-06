@@ -16,16 +16,29 @@ import sys
 
 
 def _ensure_std_streams() -> None:
-    """Restore ``sys.stdout``/``sys.stderr`` in a windowed (console=False) build.
+    """Force UTF-8 on ``sys.stdout``/``sys.stderr`` (recreate them when missing).
 
-    The packaged executable is built as a GUI application, so CPython leaves the
-    text streams as ``None`` unless the parent redirected them.  When the GUI
-    starts a download it *does* redirect them to a pipe — recreate the wrappers
-    around those handles so the downloader's output reaches the log pane.
+    The packaged executable is a GUI (``console=False``) application and the
+    PyInstaller bootloader starts the interpreter with ``use_environment = 0``,
+    so ``PYTHONUTF8`` / ``PYTHONIOENCODING`` inherited from the GUI are ignored.
+    CPython therefore builds ``sys.stdout`` from the pipe handed over by the GUI
+    with the *Windows ANSI code page* (GBK/cp936 on zh-CN systems), and printing
+    anything outside that code page — e.g. a Japanese post title containing
+    U+30FB — kills the download with ``UnicodeEncodeError``.
+
+    Reconfiguring the existing stream (and falling back to wrapping fd 1/2) keeps
+    the log pane lossless for every language.
     """
     for name, fd in (("stdout", 1), ("stderr", 2)):
-        if getattr(sys, name, None) is not None:
-            continue
+        stream = getattr(sys, name, None)
+        if stream is not None:
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                try:
+                    reconfigure(encoding="utf-8", errors="replace")
+                    continue
+                except (AttributeError, ValueError, OSError):
+                    pass
         try:
             os.fstat(fd)
         except OSError:
@@ -42,6 +55,17 @@ def _ensure_std_streams() -> None:
                     line_buffering=True,
                 ),
             )
+
+
+def _env_int(name: str, fallback: int) -> int:
+    """Read an integer from the environment, ignoring junk values."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return fallback
+    try:
+        return int(raw)
+    except ValueError:
+        return fallback
 
 
 def run_cli(argv: list[str]) -> int:
@@ -67,9 +91,23 @@ def main() -> int:
         return run_cli(argv[1:])
 
     parser = argparse.ArgumentParser(prog="kemono-dl-gui", description="kemono-dl GUI · 本地图形界面")
-    parser.add_argument("--host", default="127.0.0.1", help="监听地址（默认仅本机 127.0.0.1）")
-    parser.add_argument("--port", type=int, default=8765, help="监听端口，0 表示自动选择可用端口")
-    parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("KEMONO_DL_GUI_HOST", "127.0.0.1"),
+        help="监听地址，默认仅本机 127.0.0.1；容器/远程部署用 0.0.0.0（也可用 KEMONO_DL_GUI_HOST）",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=_env_int("KEMONO_DL_GUI_PORT", 8765),
+        help="监听端口，0 表示自动选择可用端口（也可用 KEMONO_DL_GUI_PORT）",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        default=bool(os.environ.get("KEMONO_DL_GUI_NO_BROWSER")),
+        help="启动后不自动打开浏览器（KEMONO_DL_GUI_NO_BROWSER=1 等效）",
+    )
     args = parser.parse_args(argv)
 
     from .server import run
