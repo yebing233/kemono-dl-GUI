@@ -1,0 +1,83 @@
+name: Docker image (GUI)
+
+# Builds the web GUI image, proves it runs (health probe + password gate), and
+# publishes it to GitHub Container Registry so it can be pulled anywhere:
+#
+#   docker run -d -p 127.0.0.1:8765:8765 \
+#     -v "$PWD/downloads:/downloads" -v kemono-gui-data:/data \
+#     -e KEMONO_DL_GUI_PASSWORD=change-me \
+#     ghcr.io/<owner>/kemono-dl-gui:latest
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "kemono_dl_gui/**"
+      - "kemono_dl/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "Dockerfile.gui"
+      - "docker-compose.gui.yml"
+      - ".dockerignore"
+      - ".github/workflows/docker-gui.yml"
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/kemono-dl-gui
+
+jobs:
+  docker:
+    name: Build, probe, publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f Dockerfile.gui -t "$IMAGE:ci" .
+
+      - name: Run the container and probe every access mode
+        run: |
+          docker run -d --name kemono-gui-ci -p 127.0.0.1:8765:8765 \
+            -e KEMONO_DL_GUI_PASSWORD=ci-secret "$IMAGE:ci"
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/healthz | grep -q ok; then break; fi
+            sleep 2
+          done
+          echo "healthz:             $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/healthz)"
+          echo "page without creds:  $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/)"
+          echo "page with creds:     $(curl -s -o /dev/null -w '%{http_code}' -u kemono:ci-secret http://127.0.0.1:8765/)"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/healthz)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/)" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u kemono:ci-secret http://127.0.0.1:8765/)" = "200"
+          docker logs kemono-gui-ci
+          docker rm -f kemono-gui-ci
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish image
+        if: github.event_name != 'pull_request'
+        run: |
+          TAG="${GITHUB_SHA::7}"
+          docker tag "$IMAGE:ci" "$IMAGE:latest"
+          docker tag "$IMAGE:ci" "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:$TAG"
+          {
+            echo "### Docker image published"
+            echo ""
+            echo '```'
+            echo "docker pull $IMAGE:latest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
