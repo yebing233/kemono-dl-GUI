@@ -8,6 +8,7 @@ const TOKEN = document.querySelector('meta[name="gui-token"]').content;
 const STORAGE_KEY = 'kemono-dl-gui.config.v2';
 const THEME_KEY = 'kemono-dl-gui.theme';
 const MODE_KEY = 'kemono-dl-gui.mode';
+const NAMING_KEY = 'kemono-dl-gui.naming.v1';
 const $ = (id) => document.getElementById(id);
 
 const DATE_DEFS = [
@@ -61,6 +62,7 @@ const APP = {
   running: false,
   jobFailures: [],
   mode: 'simple',
+  naming: [],
 };
 
 /* ── tiny helpers ─────────────────────────────────────────── */
@@ -443,6 +445,18 @@ function renderPresets() {
     option.dataset.template = value;
     select.append(option);
   });
+  if (APP.naming.length) {
+    const group = document.createElement('optgroup');
+    group.label = '我保存的方案';
+    for (const entry of APP.naming) {
+      const option = document.createElement('option');
+      option.value = `custom:${entry.id}`;
+      option.textContent = entry.name;
+      option.dataset.template = entry.template;
+      group.append(option);
+    }
+    select.append(group);
+  }
 }
 
 function renderPathPresets() {
@@ -1401,8 +1415,11 @@ function syncNaming() {
     const box = $(id);
     if (box) box.checked = checked;
   }
+  const saved = APP.naming.find((entry) => entry.template === template);
+  const scheme = $('customNaming');
+  if (scheme) scheme.value = saved ? saved.id : '';
   const custom = $('simpleNameCustom');
-  if (custom) custom.hidden = naming.known;
+  if (custom) custom.hidden = naming.known || Boolean(saved);
 
   const preview = $('simpleNamePreview');
   if (preview) preview.textContent = previewPathFor(template);
@@ -1427,6 +1444,152 @@ function applyNaming() {
   APP.lastTemplateInput = template;
   syncNaming();
   changed();
+}
+
+/* ── user-defined naming schemes ───────────────────────────── */
+
+function loadNamingPresets() {
+  try {
+    const raw = localStorage.getItem(NAMING_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry) => entry && typeof entry.template === 'string' && entry.template.trim())
+      .map((entry, index) => ({
+        id: String(entry.id || `n${index}`),
+        name: String(entry.name || '未命名方案').slice(0, 40),
+        template: entry.template.trim(),
+        ts: Number(entry.ts) || 0,
+      }))
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+function storeNamingPresets(list) {
+  try { localStorage.setItem(NAMING_KEY, JSON.stringify(list)); } catch { /* quota */ }
+}
+
+function renderNamingPresets() {
+  const list = APP.naming;
+
+  const select = $('customNaming');
+  if (select) {
+    const current = select.value;
+    select.textContent = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = list.length ? '不用方案，用下面的选项' : '还没有保存的方案（在专业模式里保存）';
+    select.append(placeholder);
+    for (const entry of list) {
+      const option = document.createElement('option');
+      option.value = entry.id;
+      option.textContent = entry.name;
+      option.dataset.template = entry.template;
+      select.append(option);
+    }
+    select.value = list.some((entry) => entry.id === current) ? current : '';
+  }
+
+  const box = $('savedNaming');
+  if (!box) return;
+  box.textContent = '';
+  if (!list.length) {
+    const empty = document.createElement('span');
+    empty.className = 'saved-empty';
+    empty.textContent = '还没有保存的方案 —— 填个名字、点「添加到简单模式」，它就会出现在简单模式里。';
+    box.append(empty);
+    return;
+  }
+  for (const entry of list) {
+    const chip = document.createElement('span');
+    chip.className = 'saved-item';
+
+    const name = document.createElement('b');
+    name.textContent = entry.name;
+    chip.append(name);
+
+    const code = document.createElement('code');
+    code.textContent = previewPathFor(entry.template);
+    code.title = entry.template;
+    chip.append(code);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'saved-remove';
+    remove.dataset.remove = entry.id;
+    remove.title = '从简单模式移除';
+    remove.innerHTML = '<svg class="icon"><use href="#i-x"/></svg>';
+    chip.append(remove);
+
+    box.append(chip);
+  }
+}
+
+function saveCurrentNaming() {
+  const template = activeTemplate();
+  if (!template) {
+    toast('先把模板填好，再保存成方案', 'err');
+    return;
+  }
+  const unknown = [...template.matchAll(/\{([a-z_]+)(?::[^}]*)?\}/g)]
+    .map((match) => match[1])
+    .filter((name) => !Object.prototype.hasOwnProperty.call(SAMPLE_VARS, name));
+  if (unknown.length) {
+    toast(`模板里有不认识的变量：${[...new Set(unknown)].join('、')}`, 'err');
+    return;
+  }
+
+  const input = $('namingName');
+  const name = (input.value || '').trim().slice(0, 40) || `方案 ${APP.naming.length + 1}`;
+
+  const existing = APP.naming.find((entry) => entry.template === template);
+  if (existing) {
+    existing.name = name;
+    storeNamingPresets(APP.naming);
+    renderNamingPresets();
+    syncNaming();
+    input.value = '';
+    toast(`已更新方案「${name}」`);
+    return;
+  }
+  if (APP.naming.length >= 20) {
+    toast('最多保存 20 个方案，先删掉几个再存', 'err');
+    return;
+  }
+  APP.naming.push({ id: `n${Date.now().toString(36)}`, name, template, ts: Date.now() });
+  storeNamingPresets(APP.naming);
+  renderNamingPresets();
+  syncNaming();
+  input.value = '';
+  toast(`已把「${name}」加进简单模式`);
+}
+
+function applyCustomNaming(id) {
+  const entry = APP.naming.find((item) => item.id === id);
+  if (!entry) return;
+  if ($('swSplit').checked) {
+    $('tAttachments').value = entry.template;
+    APP.templates.attachments = entry.template;
+    APP.lastTemplateInput = $('tAttachments');
+  } else {
+    $('templateInput').value = entry.template;
+    APP.templates = { attachments: entry.template, content: entry.template, json: entry.template };
+    APP.lastTemplateInput = $('templateInput');
+  }
+  syncNaming();
+  changed();
+  toast(`已套用方案「${entry.name}」`);
+}
+
+function removeNamingPreset(id) {
+  const entry = APP.naming.find((item) => item.id === id);
+  APP.naming = APP.naming.filter((item) => item.id !== id);
+  storeNamingPresets(APP.naming);
+  renderNamingPresets();
+  syncNaming();
+  if (entry) toast(`已移除方案「${entry.name}」`);
 }
 
 function applyMode(mode, persist = true) {
@@ -1507,6 +1670,32 @@ function wireEvents() {
     syncNaming();
     changed();
   });
+
+  const saveButton = $('saveNaming');
+  if (saveButton) saveButton.addEventListener('click', saveCurrentNaming);
+  const namingName = $('namingName');
+  if (namingName) {
+    namingName.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveCurrentNaming();
+      }
+    });
+  }
+  const schemeSelect = $('customNaming');
+  if (schemeSelect) {
+    schemeSelect.addEventListener('change', (event) => {
+      if (event.target.value) applyCustomNaming(event.target.value);
+      else syncNaming();
+    });
+  }
+  const savedBox = $('savedNaming');
+  if (savedBox) {
+    savedBox.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-remove]');
+      if (button) removeNamingPreset(button.dataset.remove);
+    });
+  }
 
   $('extInput').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ',') {
@@ -1733,7 +1922,9 @@ async function boot() {
   initTheme();
   applyMode(loadMode(), false);
   renderDateRows();
+  APP.naming = loadNamingPresets();
   renderPresets();
+  renderNamingPresets();
   renderVarChips();
 
   try {

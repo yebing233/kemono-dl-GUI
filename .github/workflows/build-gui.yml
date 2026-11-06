@@ -46,7 +46,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Unit tests (GUI ↔ CLI mapping)
-        run: python -m unittest tests.test_gui_args tests.test_gui_streams tests.test_gui_server tests.test_downloader_progress tests.test_downloader_resume tests.test_downloader_throttle tests.test_gui_modes tests.test_push_github -v
+        run: python -m unittest tests.test_gui_args tests.test_gui_streams tests.test_gui_server tests.test_downloader_progress tests.test_downloader_resume tests.test_downloader_throttle tests.test_gui_modes tests.test_gui_naming tests.test_push_github -v
 
       - name: Static UI check
         run: python tools/check_ui.py

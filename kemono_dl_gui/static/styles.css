@@ -1808,3 +1808,73 @@ body[data-mode="simple"] .switch-grid {
 }
 
 #authorFolderMode { max-width: 320px; }
+
+/* ── naming scheme saver ──────────────────────────────────── */
+.naming-save {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent, #8b5cf6) 4%, transparent);
+}
+
+.naming-save-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.naming-save-row .input { flex: 1 1 auto; }
+.naming-save-row .btn { flex: 0 0 auto; white-space: nowrap; }
+
+.saved-naming {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saved-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 8px 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  font-size: 12px;
+}
+
+.saved-item b { font-weight: 600; color: var(--text); white-space: nowrap; }
+
+.saved-item code {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.saved-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.saved-remove:hover { background: color-mix(in srgb, #f87171 22%, transparent); color: #f87171; }
+.saved-remove .icon { width: 12px; height: 12px; }
+
+.saved-empty { color: var(--text-dim); font-size: 12px; }
+
+@media (max-width: 720px) {
+  .naming-save-row { flex-direction: column; align-items: stretch; }
+}

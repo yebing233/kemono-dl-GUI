@@ -228,6 +228,16 @@
           </header>
           <div class="card-body">
             <div class="field">
+              <label for="customNaming">已保存的方案</label>
+              <select class="input" id="customNaming">
+                <option value="">不用方案，用下面的选项</option>
+              </select>
+              <span class="field-hint">
+                方案是在专业模式里保存的自定义模板；选中后用它的完整命名，下面的选项不再生效。
+              </span>
+            </div>
+
+            <div class="field">
               <label for="authorFolderMode">作者文件夹</label>
               <select class="input" id="authorFolderMode">
                 <option value="name+id">作者名字 [编号]（推荐）</option>
@@ -307,6 +317,23 @@
                 <label for="tJson">JSON 模板 <span class="hint">json:</span></label>
                 <input id="tJson" class="input mono" spellcheck="false">
               </div>
+            </div>
+
+            <div class="naming-save">
+              <div class="field">
+                <label for="namingName">把这套命名保存下来</label>
+                <div class="naming-save-row">
+                  <input id="namingName" class="input" maxlength="40" placeholder="方案名字，例如「作者+日期+标题」">
+                  <button class="btn btn-ghost" id="saveNaming" type="button">
+                    <svg class="icon"><use href="#i-check"/></svg>
+                    <span>添加到简单模式</span>
+                  </button>
+                </div>
+                <span class="field-hint">
+                  保存后可以在简单模式的「已保存的方案」里一键套用；方案记在这台机器的浏览器里。
+                </span>
+              </div>
+              <div class="saved-naming" id="savedNaming"></div>
             </div>
 
             <details class="details" id="customVarsBox">

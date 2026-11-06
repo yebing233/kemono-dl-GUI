@@ -96,7 +96,9 @@ the default puts the creator's readable name next to the id, e.g.
 checkboxes that compose the post folder as `日期 标题 [编号]`
 (`2026.01.01 周防桃子 _ Suou_Momoko [12665501]`). In pro mode the same results
 are template presets, and **仅服务 / 编号 (CLI 原版)** restores the CLI layout
-`{service}/{creator_id}/{post_id}/{filename}`.
+`{service}/{creator_id}/{post_id}/{filename}`. Any hand-written template in pro
+mode can be saved with a name and reused from the simple-mode **已保存的方案**
+dropdown (stored in browser localStorage, per browser).
 
 The window is a browser tab served by a loopback-only server. Use **退出程序** in
 the left rail to stop it (closing the tab alone leaves the background process
