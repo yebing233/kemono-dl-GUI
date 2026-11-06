@@ -1,5 +1,12 @@
 # kemono-dl
 A downloader tool for kemono and coomer and pawchive websties.
+
+> **Original project: [AlphaSlayer1964/kemono-dl](https://github.com/AlphaSlayer1964/kemono-dl)** ·
+> this repository is a fork that adds a [desktop GUI](#desktop-gui-modern-ui-no-python-required)
+> (plus a portable, Python-free `exe` and a Docker image).
+> All command-line behaviour — options, output templates, supported sites — comes from
+> upstream; please report CLI/downloader bugs there and GUI bugs here.
+
 > ⚠️ Kemono and Coomer file servers are dead and attempting to download from them will fail. Kemono-dl has been updated to support pawchive a Kemono alternative using the same api layout.
 
 
@@ -14,7 +21,7 @@ A downloader tool for kemono and coomer and pawchive websties.
    Make sure Python 3.11 or later is installed and available in your system PATH.
 
 2. **Download the latest release**  
-   Get the source code for the [latest version](https://github.com/AplhaSlayer1964/kemono-dl/releases/latest) and extract it.
+   Get the source code for the [latest version](https://github.com/AlphaSlayer1964/kemono-dl/releases/latest) and extract it.
 
 3. **Install with pip**  
    Open a terminal and **navigate to the root folder of the extracted project** (where `pyproject.toml` is located). Then run:
@@ -181,3 +188,21 @@ Custom variables can also reference built-in template variables using `{...}` sy
 }
 ```
 In your output template, simply use the variables like the default ones (ie `{titleTrunc}`) to insert their evaluated values.
+
+---
+
+# Credits
+
+- **[AlphaSlayer1964/kemono-dl](https://github.com/AlphaSlayer1964/kemono-dl)** — the original
+  downloader this fork builds on: CLI, site support (kemono / coomer / pawchive), output templates
+  and custom-variable handling. Upstream releases live at
+  [releases/latest](https://github.com/AlphaSlayer1964/kemono-dl/releases/latest).
+- **[yebing233/kemono-dl-GUI](https://github.com/yebing233/kemono-dl-GUI)** — this fork; adds the
+  `kemono_dl_gui/` web UI, the `--run-cli` frozen mode, the portable `exe` build
+  (`kemono-dl-gui.spec`, `tools/build_exe.py`) and the Docker packaging
+  (`Dockerfile.gui`, `docker-compose.gui.yml`).
+- [kemono.cr](https://kemono.cr) · [coomer.st](https://coomer.st) · [pawchive.pw](https://pawchive.pw) —
+  the sites the downloader talks to. This tool only downloads content your account can already access.
+
+If you only need the command line, use the upstream project; if you want the GUI, portable `exe`
+or Docker image, use this fork.
