@@ -13,7 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-DEFAULT_TEMPLATE = "{service}/{creator_id}/{post_id}/{filename}"
+# The CLI's own default, kept for reference and for users who want the original
+# layout (`kemono-dl/patreon/12345/67890/file.png`).
+CLI_DEFAULT_TEMPLATE = "{service}/{creator_id}/{post_id}/{filename}"
+# GUI default: the author folder carries the readable name next to the id.
+DEFAULT_TEMPLATE = "{service}/{creator_name} [{creator_id}]/{post_id}/{filename}"
 TEMPLATE_TYPES = ("attachments", "content", "json")
 DATE_FILTERS = ("date", "datebefore", "dateafter")
 DATE_TYPES = ("published", "added", "edited")

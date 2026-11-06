@@ -42,7 +42,11 @@ class ModeMarkupTests(unittest.TestCase):
 
     def test_simple_mode_has_its_own_naming_card(self) -> None:
         self.assertIn('id="sec-naming-simple" data-simple', HTML)
-        self.assertIn('id="swTitleNames"', HTML)
+        # 作者文件夹三选一 + 日期 / 标题 / 编号 三个勾选框
+        self.assertIn('id="authorFolderMode"', HTML)
+        for chip in ("nameDate", "nameTitle", "namePostId"):
+            self.assertIn(f'id="{chip}"', HTML)
+        self.assertIn('class="check-chip"', HTML)
 
     def test_advanced_fields_hidden_but_still_collected(self) -> None:
         for control in ("swRestrict", "swNoTmp", "swWriteJson"):
@@ -83,13 +87,26 @@ class ModeScriptTests(unittest.TestCase):
         self.assertIn("applyMode(loadMode(), false)", JS)
 
     def test_settings_controls_are_wired(self) -> None:
-        for control in ("openSettings", "modePill", "openSettingsLink", "swProMode", "swTitleNames"):
+        for control in ("openSettings", "modePill", "openSettingsLink", "swProMode", "authorFolderMode"):
             self.assertIn(f"$('{control}')", JS)
             self.assertIn(f'id="{control}"', HTML)
 
-    def test_title_naming_switch_uses_both_title_templates(self) -> None:
-        self.assertIn("TITLE_TEMPLATE = '{service}/{creator_id}/{post_title}/{filename}'", JS)
-        self.assertIn("TITLE_ID_TEMPLATE = '{service}/{creator_id}/{post_title} [{post_id}]/{filename}'", JS)
+    def test_naming_controls_compose_the_template(self) -> None:
+        """勾选项必须真的拼进模板，否则界面上勾了等于没勾。"""
+        self.assertIn("function buildTemplate(", JS)
+        self.assertIn("function deriveNaming(", JS)
+        self.assertIn("function applyNaming(", JS)
+        self.assertIn("'{creator_name} [{creator_id}]'", JS)
+        self.assertIn("'{published:%Y.%m.%d}'", JS)
+        self.assertIn("'{post_title}'", JS)
+        self.assertIn("'[{post_id}]'", JS)
+        for control in ("nameDate", "nameTitle", "namePostId"):
+            self.assertIn(f"'{control}'", JS)
+
+    def test_author_folder_defaults_to_name_and_id(self) -> None:
+        self.assertIn("FALLBACK_TEMPLATE = '{service}/{creator_name} [{creator_id}]/{post_id}/{filename}'", JS)
+        body = JS.split("function applyConfig(", 1)[1].split("\nfunction ", 1)[0]
+        self.assertIn("syncNaming();", body)
 
     def test_settings_modal_is_closed_with_the_others(self) -> None:
         body = JS.split("function closeModals()", 1)[1].split("}", 1)[0]

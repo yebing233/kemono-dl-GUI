@@ -223,16 +223,32 @@
             <span class="card-icon"><svg class="icon"><use href="#i-tag"/></svg></span>
             <div>
               <h2><span class="step-badge">3</span>文件怎么命名</h2>
-              <p>默认用帖子编号当文件夹；想让文件夹名看得懂，就把下面的开关打开。</p>
+              <p>挑几样信息当文件夹名，下面会实时显示最终路径。</p>
             </div>
           </header>
           <div class="card-body">
-            <label class="switch-row switch-row-plain">
-              <input type="checkbox" id="swTitleNames">
-              <span class="switch"></span>
-              <span class="switch-text"><b>用帖子标题命名文件夹</b><em class="keep-note">编号会保留在方括号里，方便回查原帖</em></span>
-            </label>
+            <div class="field">
+              <label for="authorFolderMode">作者文件夹</label>
+              <select class="input" id="authorFolderMode">
+                <option value="name+id">作者名字 [编号]（推荐）</option>
+                <option value="name">只要作者名字</option>
+                <option value="id">只要编号</option>
+              </select>
+              <span class="field-hint">决定 <code>fanbox/…</code> 这一层怎么叫；作者名字取站点上的名字。</span>
+            </div>
+
+            <div class="field">
+              <span class="field-label">帖子文件夹里包含</span>
+              <div class="name-parts" id="nameParts">
+                <label class="check-chip"><input type="checkbox" id="nameDate"><span>日期</span></label>
+                <label class="check-chip"><input type="checkbox" id="nameTitle"><span>帖子标题</span></label>
+                <label class="check-chip"><input type="checkbox" id="namePostId"><span>帖子编号</span></label>
+              </div>
+              <span class="field-hint">全不勾就用帖子编号；勾选的项按「日期 标题 [编号]」的顺序拼起来，日期取发布时间（<code>2026.01.01</code>）。</span>
+            </div>
+
             <p class="simple-preview">实际效果：<code id="simpleNamePreview">patreon/12345/67890/attachment.png</code></p>
+            <p class="hint" id="simpleNameCustom" hidden>当前是专业模式里手写的自定义模板，调整上面任意选项会覆盖它。</p>
             <p class="hint hint-block">
               想要自定义模板、日期过滤、cookies、登录？
               <button class="link-btn" id="openSettingsLink" type="button">打开设置 → 专业模式</button>

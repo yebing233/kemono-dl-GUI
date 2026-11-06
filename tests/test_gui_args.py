@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from kemono_dl_gui.args import (  # noqa: E402
+    DEFAULT_TEMPLATE,
     TemplateError,
     build_command,
     normalise_config,
@@ -210,11 +211,43 @@ class TemplateTests(unittest.TestCase):
             render_template("{nope}/{filename}", "C:/out", False, None)
 
 
+class AuthorFolderTests(unittest.TestCase):
+    """The GUI default names the author folder ``名字 [编号]``."""
+
+    def test_author_name_and_id(self):
+        path = render_template(DEFAULT_TEMPLATE, "C:/out", False, None)
+        flat = path.replace("\\", "/")
+        self.assertTrue(flat.endswith("patreon/Sample Creator [12345]/67890/attachment.png"), flat)
+
+    def test_author_name_only(self):
+        path = render_template("{service}/{creator_name}/{post_id}/{filename}", "C:/out", False, None)
+        self.assertTrue(path.replace("\\", "/").endswith("patreon/Sample Creator/67890/attachment.png"), path)
+
+    def test_published_date_spec(self):
+        path = render_template(
+            "{service}/{creator_name} [{creator_id}]/{published:%Y.%m.%d} {post_title}/{filename}",
+            "C:/out",
+            False,
+            None,
+        )
+        flat = path.replace("\\", "/")
+        self.assertIn("/patreon/Sample Creator [12345]/", flat)
+        self.assertIn("/attachment.png", flat)
+        self.assertRegex(flat, r"/\d{4}\.\d{2}\.\d{2} ")
+
+    def test_restrict_names_keeps_author_folder_readable(self):
+        path = render_template("{service}/{creator_name} [{creator_id}]/{post_id}/{filename}", "C:/out", True, None)
+        self.assertIn("[12345]", path)
+
+
 class NormaliseTests(unittest.TestCase):
     def test_defaults(self):
         cfg = normalise_config({}, "C:/out")
         self.assertEqual(cfg["path"], "C:/out")
-        self.assertEqual(cfg["templates"]["attachments"], "{service}/{creator_id}/{post_id}/{filename}")
+        self.assertEqual(
+            cfg["templates"]["attachments"],
+            "{service}/{creator_name} [{creator_id}]/{post_id}/{filename}",
+        )
         self.assertEqual(cfg["skip_extensions"], [])
 
 

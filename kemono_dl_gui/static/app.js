@@ -21,12 +21,13 @@ const DATE_TYPES = [
   ['edited', '编辑时间'],
 ];
 const TEMPLATE_PRESETS = [
-  ['默认 (服务 / 作者 / 帖子 / 文件名)', '{service}/{creator_id}/{post_id}/{filename}'],
-  ['仅用帖子标题命名 (不含编号)', '{service}/{creator_id}/{post_title}/{filename}'],
-  ['帖子标题 + 编号', '{service}/{creator_id}/{post_title} [{post_id}]/{filename}'],
-  ['按帖子标题分类', '{service}/{creator_id}/{post_id} - {post_title}/{filename}'],
-  ['按发布日期分类', '{service}/{creator_id}/{published:%Y-%m-%d}/{post_id}/{filename}'],
-  ['按作者名分类', '{service}/{creator_name}/{post_id}/{filename}'],
+  ['作者名 [编号] / 帖子编号 (默认)', '{service}/{creator_name} [{creator_id}]/{post_id}/{filename}'],
+  ['只要作者名 / 帖子编号', '{service}/{creator_name}/{post_id}/{filename}'],
+  ['作者名 [编号] / 日期 标题 [编号]', '{service}/{creator_name} [{creator_id}]/{published:%Y.%m.%d} {post_title} [{post_id}]/{filename}'],
+  ['作者名 [编号] / 日期 标题', '{service}/{creator_name} [{creator_id}]/{published:%Y.%m.%d} {post_title}/{filename}'],
+  ['作者名 [编号] / 标题 [编号]', '{service}/{creator_name} [{creator_id}]/{post_title} [{post_id}]/{filename}'],
+  ['作者名 [编号] / 帖子标题', '{service}/{creator_name} [{creator_id}]/{post_title}/{filename}'],
+  ['仅服务 / 编号 (CLI 原版)', '{service}/{creator_id}/{post_id}/{filename}'],
   ['扁平文件名', '{service}_{creator_id}_{post_id}_{filename}'],
   ['按扩展名分类', '{service}/{creator_id}/{post_id}/{file_ext}/{filename}'],
 ];
@@ -145,7 +146,7 @@ function toast(message, kind = 'info') {
 
 function defaultConfig() {
   const path = (APP.meta && APP.meta.defaultPath) || '';
-  const template = (APP.meta && APP.meta.defaultTemplate) || '{service}/{creator_id}/{post_id}/{filename}';
+  const template = (APP.meta && APP.meta.defaultTemplate) || FALLBACK_TEMPLATE;
   return {
     urls: '',
     batchFiles: [],
@@ -303,7 +304,7 @@ function applyConfig(cfg) {
   syncDateRows();
   syncLoginStates();
   syncTemplateMode();
-  syncTitleNames();
+  syncNaming();
 }
 
 /* ── rendering of dynamic bits ────────────────────────────── */
@@ -1312,9 +1313,7 @@ function initTheme() {
 
 /* ── 简单模式 / 专业模式 ─────────────────────────────────── */
 
-const TITLE_TEMPLATE = '{service}/{creator_id}/{post_title}/{filename}';
-const TITLE_ID_TEMPLATE = '{service}/{creator_id}/{post_title} [{post_id}]/{filename}';
-const FALLBACK_TEMPLATE = '{service}/{creator_id}/{post_id}/{filename}';
+const FALLBACK_TEMPLATE = '{service}/{creator_name} [{creator_id}]/{post_id}/{filename}';
 
 const SAMPLE_VARS = {
   service: 'patreon',
@@ -1322,12 +1321,58 @@ const SAMPLE_VARS = {
   creator_name: 'Some Creator',
   post_id: '67890',
   post_title: '限定・ステッカー セット',
+  published: new Date(2026, 0, 1, 12, 0, 0),
+  added: new Date(2026, 0, 1, 12, 0, 0),
+  edited: new Date(2026, 0, 2, 9, 30, 0),
   filename: 'attachment.png',
   file_name: 'attachment',
   file_ext: 'png',
   server_filename: 'ke20190416_1.jpg',
   index: '1',
 };
+
+/* Simple mode composes the template from these four choices. */
+function buildTemplate(opts) {
+  const authorFolder = opts.author === 'id'
+    ? '{creator_id}'
+    : (opts.author === 'name' ? '{creator_name}' : '{creator_name} [{creator_id}]');
+  const parts = [];
+  if (opts.date) parts.push('{published:%Y.%m.%d}');
+  if (opts.title) parts.push('{post_title}');
+  if (opts.postId) parts.push('[{post_id}]');
+  const postFolder = parts.length ? parts.join(' ') : '{post_id}';
+  return `{service}/${authorFolder}/${postFolder}/{filename}`;
+}
+
+/* Recover the four choices from any template, so a saved/typed template keeps
+   the simple-mode controls in sync. */
+function deriveNaming(template) {
+  const segments = String(template || '').trim().split(/[\\/]/);
+  const creator = segments[1] || '';
+  const post = segments[2] || '';
+  const author = creator.indexOf('{creator_id}') === -1
+    ? 'name'
+    : (creator.indexOf('{creator_name}') === -1 ? 'id' : 'name+id');
+  const naming = {
+    author,
+    date: /\{(?:published|added|edited)(?=[:}])/.test(post),
+    title: post.indexOf('{post_title}') !== -1,
+    postId: post.indexOf('{post_id}') !== -1,
+  };
+  naming.known = buildTemplate(naming) === String(template || '').trim();
+  return naming;
+}
+
+function strftimeSample(value, spec) {
+  const two = (n) => String(n).padStart(2, '0');
+  return spec
+    .replace(/%Y/g, String(value.getFullYear()))
+    .replace(/%m/g, two(value.getMonth() + 1))
+    .replace(/%d/g, two(value.getDate()))
+    .replace(/%H/g, two(value.getHours()))
+    .replace(/%M/g, two(value.getMinutes()))
+    .replace(/%S/g, two(value.getSeconds()));
+}
 
 function activeTemplate() {
   if ($('swSplit').checked) return ($('tAttachments').value || '').trim();
@@ -1336,19 +1381,52 @@ function activeTemplate() {
 
 function previewPathFor(template) {
   const source = (template || '').trim() || FALLBACK_TEMPLATE;
-  const rendered = source.replace(/\{([a-z_]+)\}/g, (whole, name) => (
-    Object.prototype.hasOwnProperty.call(SAMPLE_VARS, name) ? SAMPLE_VARS[name] : whole
-  ));
+  const rendered = source.replace(/\{([a-z_]+)(?::([^}]*))?\}/g, (whole, name, spec) => {
+    if (!Object.prototype.hasOwnProperty.call(SAMPLE_VARS, name)) return whole;
+    const sample = SAMPLE_VARS[name];
+    if (spec && sample instanceof Date) return strftimeSample(sample, spec);
+    return String(sample);
+  });
   return rendered.replace(/[\\/]+/g, '/').replace(/^\/+/, '');
 }
 
-function syncTitleNames() {
+function syncNaming() {
   const template = activeTemplate();
-  const on = template === TITLE_TEMPLATE || template === TITLE_ID_TEMPLATE;
-  const toggle = $('swTitleNames');
-  if (toggle) toggle.checked = on;
+  const naming = deriveNaming(template);
+
+  const author = $('authorFolderMode');
+  if (author) author.value = naming.author;
+  const flags = { nameDate: naming.date, nameTitle: naming.title, namePostId: naming.postId };
+  for (const [id, checked] of Object.entries(flags)) {
+    const box = $(id);
+    if (box) box.checked = checked;
+  }
+  const custom = $('simpleNameCustom');
+  if (custom) custom.hidden = naming.known;
+
   const preview = $('simpleNamePreview');
   if (preview) preview.textContent = previewPathFor(template);
+}
+
+/* Write the composed template back into whichever template field is active. */
+function applyNaming() {
+  const opts = {
+    author: $('authorFolderMode').value,
+    date: $('nameDate').checked,
+    title: $('nameTitle').checked,
+    postId: $('namePostId').checked,
+  };
+  const template = buildTemplate(opts);
+  if ($('swSplit').checked) {
+    $('tAttachments').value = template;
+    $('tContent').value = template;
+    $('tJson').value = template;
+  } else {
+    $('templateInput').value = template;
+  }
+  APP.lastTemplateInput = template;
+  syncNaming();
+  changed();
 }
 
 function applyMode(mode, persist = true) {
@@ -1364,7 +1442,7 @@ function applyMode(mode, persist = true) {
   if (persist) {
     try { localStorage.setItem(MODE_KEY, next); } catch { /* ignore */ }
   }
-  syncTitleNames();
+  syncNaming();
 }
 
 function loadMode() {
@@ -1396,7 +1474,7 @@ function wireEvents() {
         };
       }
       changed();
-      if (id === 'templateInput' || id.startsWith('t')) syncTitleNames();
+      if (id === 'templateInput' || id.startsWith('t')) syncNaming();
     });
     el.addEventListener('focus', () => {
       if (['templateInput', 'tAttachments', 'tContent', 'tJson'].includes(id)) APP.lastTemplateInput = el;
@@ -1426,7 +1504,7 @@ function wireEvents() {
       APP.templates.attachments = option.dataset.template;
     }
     event.target.value = '';
-    syncTitleNames();
+    syncNaming();
     changed();
   });
 
@@ -1582,18 +1660,10 @@ function wireEvents() {
       ? '已打开专业模式：全部选项都会显示。'
       : '已切回简单模式：高级选项先收起来，之前的设置仍然保留。', 'info');
   });
-  $('swTitleNames').addEventListener('change', () => {
-    const template = $('swTitleNames').checked
-      ? TITLE_ID_TEMPLATE
-      : ((APP.meta && APP.meta.defaultTemplate) ? APP.meta.defaultTemplate : FALLBACK_TEMPLATE);
-    $('templateInput').value = template;
-    $('tAttachments').value = template;
-    $('tContent').value = template;
-    $('tJson').value = template;
-    APP.templates = { attachments: template, content: template, json: template };
-    syncTitleNames();
-    changed();
-  });
+  $('authorFolderMode').addEventListener('change', applyNaming);
+  for (const id of ['nameDate', 'nameTitle', 'namePostId']) {
+    $(id).addEventListener('change', applyNaming);
+  }
 
   document.querySelectorAll('[data-close]').forEach((btn) => btn.addEventListener('click', closeModals));
   document.querySelectorAll('.modal').forEach((modal) => {

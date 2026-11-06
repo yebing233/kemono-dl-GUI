@@ -125,13 +125,26 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 
 | 模式 | 显示的内容 | 适合谁 |
 | --- | --- | --- |
-| 简单模式（默认） | 链接 / 保存位置 / 命名方式（一个「用帖子标题命名」开关）/ 任务与日志 | 只想把图存下来的人 |
+| 简单模式（默认） | 链接 / 保存位置 / 命名方式（作者文件夹 + 日期 / 标题 / 编号 勾选）/ 任务与日志 | 只想把图存下来的人 |
 | 专业模式 | 全部：命名模板与变量、分段模板、日期过滤、跳过扩展名、归档、cookies、三站登录、自定义变量、命令行预览 | 需要复现命令行行为、或做增量 / 精细命名的人 |
 
-简单模式里的「用帖子标题命名文件夹」其实就是一条快捷方式：
-打开它等于把模板改成 `{service}/{creator_id}/{post_title} [{post_id}]/{filename}`，
-关掉则回到默认的 `{service}/{creator_id}/{post_id}/{filename}`。
-卡片下方会实时显示这条模板渲染出来的样例路径。
+简单模式里的「文件怎么命名」有两个控件，勾一勾就是一条模板：
+
+1. **作者文件夹**：`作者名字 [编号]`（默认，目录形如 `fanbox/周防桃子 _ Suou_Momoko [72927321]/`）、
+   `只要作者名字`、`只要编号`（等于 CLI 原来的 `fanbox/72927321/`）。
+2. **帖子文件夹里包含**：`日期`、`帖子标题`、`帖子编号` 三个勾选框，按 `日期 标题 [编号]`
+   的顺序拼起来；一个都不勾就只用帖子编号。
+
+| 勾选 | 帖子文件夹 | 完整示例 |
+| --- | --- | --- |
+| 日期 + 标题 | `2026.01.01 周防桃子 _ Suou_Momoko` | `kemono-dl/fanbox/周防桃子 _ Suou_Momoko [72927321]/2026.01.01 周防桃子 _ Suou_Momoko/file.png` |
+| 标题 + 编号 | `周防桃子 _ Suou_Momoko [12665501]` | `…/[72927321]/周防桃子 _ Suou_Momoko [12665501]/file.png` |
+| 日期 + 标题 + 编号 | `2026.01.01 周防桃子 _ Suou_Momoko [12665501]` | `…/[72927321]/2026.01.01 周防桃子 _ Suou_Momoko [12665501]/file.png` |
+| 都不勾 | `12665501` | `…/[72927321]/12665501/file.png` |
+
+日期取帖子的发布时间（`published`），格式 `YYYY.MM.DD`，也可以直接在模板里写
+`{published:%Y-%m-%d}` 之类。卡片下方会实时显示这条模板渲染出来的样例路径；
+如果模板是你在专业模式里手写的，卡片会提示「调整上面任意选项会覆盖它」。
 
 ---
 
@@ -218,12 +231,20 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 
 | 预设 | 模板 |
 | --- | --- |
-| 默认（service/creator/post） | `{service}/{creator_id}/{post_id}/{filename}` |
-| 仅用帖子标题命名（不含编号） | `{service}/{creator_id}/{post_title}/{filename}` |
-| 帖子标题 + 编号 | `{service}/{creator_id}/{post_title} [{post_id}]/{filename}` |
-| 按作者名分组 | `{service}/{creator_name} [{creator_id}]/{filename}` |
-| 按发布日期分组 | `{service}/{creator_id}/{published:%Y%m%d}/{filename}` |
-| 旧版兼容 | `{service}/{creator_name} [{creator_id}]/[{published:%Y%m%d}] [{post_id}] {post_title}/{index}_{filename}` |
+| 作者名 [编号] / 帖子编号（默认） | `{service}/{creator_name} [{creator_id}]/{post_id}/{filename}` |
+| 只要作者名 / 帖子编号 | `{service}/{creator_name}/{post_id}/{filename}` |
+| 作者名 [编号] / 日期 标题 [编号] | `{service}/{creator_name} [{creator_id}]/{published:%Y.%m.%d} {post_title} [{post_id}]/{filename}` |
+| 作者名 [编号] / 日期 标题 | `{service}/{creator_name} [{creator_id}]/{published:%Y.%m.%d} {post_title}/{filename}` |
+| 作者名 [编号] / 标题 [编号] | `{service}/{creator_name} [{creator_id}]/{post_title} [{post_id}]/{filename}` |
+| 作者名 [编号] / 帖子标题 | `{service}/{creator_name} [{creator_id}]/{post_title}/{filename}` |
+| 仅服务 / 编号（CLI 原版） | `{service}/{creator_id}/{post_id}/{filename}` |
+| 扁平文件名 | `{service}_{creator_id}_{post_id}_{filename}` |
+| 按扩展名分类 | `{service}/{creator_id}/{post_id}/{file_ext}/{filename}` |
+
+> **默认值变了**：GUI 的默认模板是「作者名字 [编号] / 帖子编号」，
+> 也就是 `kemono-dl/fanbox/周防桃子 _ Suou_Momoko [72927321]/12665501/file.png`，
+> 比 CLI 原来的 `fanbox/72927321/` 更好认。想完全回到命令行布局，
+> 选最后第三行的 **仅服务 / 编号（CLI 原版）**。
 
 > 想要「用帖子标题当文件夹名」就选第二行那个预设，等价于把模板改成
 > `{service}/{creator_id}/{post_title}/{filename}`；想同时保留编号就选第三行
@@ -424,7 +445,7 @@ git push -u origin main
 | `python -m unittest tests.test_downloader_progress` | 2 个单元测试，确认 stdout 是管道时仍逐块输出 `\r` 进度（进度条不再停在 0%） |
 | `python -m unittest tests.test_downloader_throttle` | 9 个单元测试，核对请求限速：默认 1 秒、0 关闭、NaN/负数兜底，以及全新下载不额外发探测请求 |
 | `python -m unittest tests.test_downloader_resume` | 13 个单元测试，覆盖断点续传（`Range` 续传、服务端忽略 Range、416、截断保留 `.tmp`）与「跳过已下载」的各种判定 |
-| `python -m unittest tests.test_gui_modes` | 12 个静态断言，保证简单模式默认收起高级选项、专业模式开关与「用帖子标题命名」接线完整 |
+| `python -m unittest tests.test_gui_modes` | 13 个静态断言，保证简单模式默认收起高级选项、专业模式开关与「作者文件夹 / 日期 / 标题 / 编号」接线完整 |
 | `python tools/docker_test.py` | 以 `0.0.0.0` + 密码模式启动，验证 `/healthz`、401/200、令牌与退出 |
 | `python tools/push_github.py --dry-run` | 不装 git，直接对比本地目录与远端分支：列出将新增/修改/删除的文件，付 token 后一次性提交 |
 | `python -m unittest tests.test_push_github` | 7 个单元测试，核对 git blob SHA 算法与上传忽略规则（点开头文件必须收、`dist`/`.build` 必须排除） |
@@ -479,18 +500,25 @@ GBK）创建 `sys.stdout`，遇到 GBK 表示不了的字符（例如日文标�
 （回归测试：`tests/test_downloader_progress.py`、`tests/test_gui_streams.py`）
 
 **想让文件夹用帖子标题，而不是帖子编号？**
-简单模式下直接打开「文件怎么命名」里的 **用帖子标题命名文件夹** 开关即可，
-目录会变成 `{post_title} [{post_id}]`，编号还在，方便回查。
+简单模式下，「文件怎么命名」里勾上 **帖子标题**（想保留编号就再勾 **帖子编号**，
+想要日期就再勾 **日期**），下面的「实际效果」会立刻显示最终目录名。
 
 专业模式下则是在「命名模板」里选预设：
 
 ```
-{service}/{creator_id}/{post_title}/{filename}                        ← 只用标题（丢弃编号）
-{service}/{creator_id}/{post_title} [{post_id}]/{filename}            ← 标题 + 编号
+{service}/{creator_name} [{creator_id}]/{post_title}/{filename}                    ← 只用标题（丢弃编号）
+{service}/{creator_name} [{creator_id}]/{post_title} [{post_id}]/{filename}        ← 标题 + 编号
+{service}/{creator_name} [{creator_id}]/{published:%Y.%m.%d} {post_title} [{post_id}]/{filename}
 ```
 
 标题里的非法字符（`<>:"/\|?*`）会被替换成 `_`；极少数帖子标题为空时目录名会退化成空串，
 这种情况用带编号的写法更稳妥。
+
+**作者文件夹为什么从 `72927321` 变成了 `名字 [72927321]`？**
+这是 GUI 的默认模板（`{creator_name} [{creator_id}]`），方便你按名字找到作者，
+同时保留编号便于回查。想要「只要名字」就在简单模式里把 **作者文件夹** 选成
+`只要作者名字`；想回到 CLI 原样就选 `只要编号`，或在专业模式里应用
+**仅服务 / 编号（CLI 原版）** 预设。
 
 **打开界面发现选项变少了 / 找不到模板、日期过滤、登录？**
 默认是简单模式。点右上角的模式徽标，或左侧栏底部 **设置**，把 **专业模式** 打开即可。

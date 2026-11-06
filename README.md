@@ -89,10 +89,14 @@ equivalent command line (passwords masked) so any configuration can be
 reproduced in a terminal. Progress is parsed from the downloader's `\r` repaints,
 so the bar moves while a file is still downloading, and the job panel shows how many files
 are downloaded / still queued plus an estimated remaining size (`≈`, measured from finished
-files — the site API does not expose attachment sizes). Simple mode has a single
-**用帖子标题命名文件夹** switch; in pro mode the template presets
-**仅用帖子标题命名 (不含编号)** (`{service}/{creator_id}/{post_title}/{filename}`) and
-**帖子标题 + 编号** (`{post_title} [{post_id}]`) do the same thing explicitly.
+files — the site API does not expose attachment sizes). Simple mode names folders
+with two controls: an **作者文件夹** select (`名字 [编号]`, name only, or id only —
+the default puts the creator's readable name next to the id, e.g.
+`fanbox/周防桃子 _ Suou_Momoko [72927321]/`) and **日期 / 帖子标题 / 帖子编号**
+checkboxes that compose the post folder as `日期 标题 [编号]`
+(`2026.01.01 周防桃子 _ Suou_Momoko [12665501]`). In pro mode the same results
+are template presets, and **仅服务 / 编号 (CLI 原版)** restores the CLI layout
+`{service}/{creator_id}/{post_id}/{filename}`.
 
 The window is a browser tab served by a loopback-only server. Use **退出程序** in
 the left rail to stop it (closing the tab alone leaves the background process
