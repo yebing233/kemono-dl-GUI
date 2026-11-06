@@ -352,18 +352,22 @@ class KemonoDL:
             )
             expected_sha256 = template_variables.sha256
 
-            if os.path.exists(file_path):
-                actual_sha256 = get_sha256_hash(file_path)
+            if os.path.exists(file_path) and self.force_overwrite is not True:
+                if expected_sha256:
+                    actual_sha256 = get_sha256_hash(file_path)
 
-                if self.force_overwrite is False:
-                    print(f"[info] File already exists at {file_path}")
-                    if expected_sha256 != actual_sha256:
-                        print(f'[warning] File sha256 mismatch. Expected "{expected_sha256}" recieved"{actual_sha256}"')
-                    continue
+                    if expected_sha256 == actual_sha256:
+                        print(f"[skip] File already exists with matching sha256 at {file_path}")
+                        continue
 
-                elif self.force_overwrite == "soft" and expected_sha256 == actual_sha256:
-                    print(f"[info] File already exists with matching sha256 at {file_path}")
-                    continue
+                    # A verified hash mismatch means the local copy is broken
+                    # (truncated / corrupted), so drop it and fetch it again.
+                    print(
+                        f'[warning] sha256 mismatch at {file_path}. Expected "{expected_sha256}" '
+                        f'got "{actual_sha256}"; re-downloading'
+                    )
+                    os.remove(file_path)
+                # Without an expected hash, download_file verifies the size instead.
 
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
@@ -372,22 +376,42 @@ class KemonoDL:
             else:
                 url = f"{attachment.server}/data{attachment.path}"
 
-            for _ in range(self.max_retries):
+            failures = 0
+            while failures < self.max_retries:
                 try:
-                    download_file(self.session, url, file_path, temp_file=not self.no_tmp)
+                    status = download_file(
+                        self.session,
+                        url,
+                        file_path,
+                        temp_file=not self.no_tmp,
+                        overwrite=self.force_overwrite is True,
+                    )
+                    if status == "skipped":
+                        print(f"[info] Skipped an already downloaded file at {file_path}")
                     break
                 except Exception as e:
-                    print(f"[Error] Failed to download attachment from {url!r}: {e}")
-                    attachment_errors += 1
+                    failures += 1
+                    print(
+                        f"[Error] Failed to download attachment from {url!r} "
+                        f"({failures}/{self.max_retries}): {e}"
+                    )
+                    if failures < self.max_retries:
+                        delay = min(2**failures, 30)
+                        print(f"[info] Reconnecting in {delay}s and resuming from the partial file")
+                        time.sleep(delay)
             else:
-                print(f"[Error] All {self.max_retries} download reties failed")
+                print(f"[Error] All {self.max_retries} download retries failed")
                 attachment_errors += 1
                 continue
 
-            actual_sha256 = get_sha256_hash(file_path)
-            if expected_sha256 != actual_sha256:
-                print(f"[Error] File downloaded with incorrect SHA-256. Expected: {expected_sha256} Actual: {actual_sha256}")
-                attachment_errors += 1
+            if expected_sha256:
+                actual_sha256 = get_sha256_hash(file_path)
+                if expected_sha256 != actual_sha256:
+                    print(
+                        f"[Error] File downloaded with incorrect SHA-256. "
+                        f"Expected: {expected_sha256} Actual: {actual_sha256}"
+                    )
+                    attachment_errors += 1
 
         return attachment_errors
 

@@ -260,6 +260,7 @@ class Job:
             "posts": 0,
             "files": 0,
             "pending": 0,
+            "skipped": 0,
             "downloaded": 0,
             "remaining": 0,
             "bytesPerFile": 0,
@@ -366,6 +367,11 @@ class Job:
             except (IndexError, ValueError):
                 count = 0
             self._expected_files += max(0, count)
+        elif stripped.startswith("[skip]"):
+            # the downloader verified a local file and did not fetch anything
+            self.progress["skipped"] += 1
+            self._in_file = False
+            self._current_total = 0.0
         elif stripped.startswith("[downloading] Destination:"):
             # printed just before a file starts, so the previous one is finished
             if self._in_file:

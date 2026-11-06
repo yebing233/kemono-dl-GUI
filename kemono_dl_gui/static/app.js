@@ -805,7 +805,9 @@ function renderSelectedJob(job) {
     : `${percent.toFixed(1)}%${job.progress.total ? ` · ${job.progress.total}` : ''}`;
   const done = job.progress.downloaded || 0;
   const left = job.progress.remaining || 0;
-  $('jobSize').textContent = done ? `已下载 ${formatBytes(done)}` : '—';
+  const skipped = job.progress.skipped || 0;
+  const skipNote = skipped ? ` · 跳过 ${skipped}` : '';
+  $('jobSize').textContent = done ? `已下载 ${formatBytes(done)}${skipNote}` : (skipped ? `跳过 ${skipped}` : '—');
   $('jobSpeed').textContent = job.progress.speed || '—';
   $('jobEta').textContent = job.progress.eta ? `剩余 ${job.progress.eta}` : '—';
 
@@ -831,9 +833,11 @@ const LOG_RULES = [
   [/^\[Error\]/i, 'is-err'],
   [/^\[warning\]/i, 'is-warn'],
   [/^\[info\]/i, 'is-info'],
+  [/^\[skip\]/i, 'is-skip'],
   [/^\[writing\]/i, 'is-write'],
   [/^\[gui\]/i, 'is-gui'],
   [/^\[downloading\]\s+Destination:/i, 'is-ok'],
+  [/^\[downloading\]\s+Resuming/i, 'is-skip'],
   [/^\[downloading\]\s+\d/, 'is-progress'],
 ];
 

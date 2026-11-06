@@ -112,6 +112,22 @@ class ProgressParsingTests(unittest.TestCase):
         job.append("[downloading] Destination: 'b.png'")
         self.assertEqual(job.progress["files"], 1)
 
+    def test_skipped_files_are_counted(self) -> None:
+        job = self.job()
+        job.append("[downloading] Attachments: 2")
+        job.append("[downloading] Destination: 'a.png'")
+        job.append("[skip] Already downloaded, size verified (5.00 MiB)")
+        self.assertEqual(job.progress["skipped"], 1)
+        # a skipped file needs no download, so it leaves the queue
+        self.assertEqual(job.progress["pending"], 1)
+
+    def test_resume_lines_do_not_touch_counters(self) -> None:
+        job = self.job()
+        job.append("[downloading] Destination: 'b.png'")
+        job.append("[downloading] Resuming partially downloaded file (2.00 MiB of 10.00 MiB)")
+        self.assertEqual(job.progress["skipped"], 0)
+        self.assertEqual(job.progress["files"], 0)
+
     def test_pending_follows_attachment_count(self) -> None:
         job = self.job()
         job.append("[downloading] Post: 'one'")

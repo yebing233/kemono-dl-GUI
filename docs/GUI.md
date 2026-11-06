@@ -257,6 +257,31 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 * 失败的任务可以「重试」，会以同样的参数重新入队；
 * 任务完成后可直接「打开目标文件夹」。
 
+### 断点续传与「跳过已下载」
+
+下载器默认就是**幂等**的：同一个帖子再下一次，已经完整的文件不会被重复下载。
+
+| 本地状态 | 行为 | 日志 |
+| --- | --- | --- |
+| 文件已存在且大小与远端一致 | 直接跳过，一个字节都不请求 | `[skip] Already downloaded, size verified (5.60 MiB)` |
+| 文件已存在、大小更大 | 保留本地文件（远端可能是被截断的版本） | `[warning] Local file is ... keeping the local copy` |
+| 文件已存在、远端不报大小 | 保留本地文件 | `[skip] File already exists and the remote size is unknown` |
+| 文件已存在、API 给了 sha256 且校验通过 | 跳过 | `[skip] File already exists with matching sha256` |
+| 文件已存在、sha256 不匹配 | 删掉重下（旧版本只警告，留下坏文件） | `[warning] sha256 mismatch ... re-downloading` |
+| 只剩 `.tmp` 残留（上次中断 / 断电） | 发 `Range: bytes=N-` 从断点续传 | `[downloading] Resuming partially downloaded file (2.00 MiB / 5.60 MiB)` |
+| 中途失败 | 指数退避重连（2 s → 4 s → 8 s … 最多 30 s），接着续传 | `[info] Reconnecting in 4s and resuming from the partial file` |
+| 服务器不认 `Range`（回了 200） | 丢掉半截文件从头下，避免写出坏文件 | `[warning] Server ignored the Range request; restarting from zero` |
+| 服务器回 416 且本地已够长 | 认为已完成，收尾并跳过 | `[skip] File was already complete` |
+| 下载长度与远端不一致 | 报错并**保留** `.tmp` 供下次续传 | `[Error] incomplete download: got 3.00 MiB of 5.60 MiB ...` |
+
+相关界面表现：
+
+* 任务统计行的「已下载」后面会追加 **· 跳过 N**，日志里 `[skip]` 行是浅蓝色；
+* 「设置 → 专业模式 → 保存位置 → 不使用临时文件（`--no-tmp`）」打开后**没有断点续传**
+  （没有 `.tmp` 可续），但「大小 / 哈希校验后跳过」依然生效；
+* 「过滤 → 跳过附件（`--skip-attachments`）」是另一个概念：它不下载附件本身，只写正文 / JSON；
+* 想让 GUI 完全复现 CLI 行为，命令行里的 `--no-tmp` 就是唯一会关掉续传的开关。
+
 > 界面不会自己实现下载逻辑，也不会改写 CLI 的输出，因此日志就是原版
 > `kemono-dl` 的日志，排查问题时可以直接对照。
 
@@ -345,6 +370,7 @@ git push -u origin main
 | `python -m unittest tests.test_gui_streams` | 5 个单元测试，保证日志管道强制 UTF-8 且不做块缓冲（日文标题不崩、进度不延迟） |
 | `python -m unittest tests.test_gui_server` | 18 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量）与进度行解析 |
 | `python -m unittest tests.test_downloader_progress` | 2 个单元测试，确认 stdout 是管道时仍逐块输出 `\r` 进度（进度条不再停在 0%） |
+| `python -m unittest tests.test_downloader_resume` | 13 个单元测试，覆盖断点续传（`Range` 续传、服务端忽略 Range、416、截断保留 `.tmp`）与「跳过已下载」的各种判定 |
 | `python -m unittest tests.test_gui_modes` | 12 个静态断言，保证简单模式默认收起高级选项、专业模式开关与「用帖子标题命名」接线完整 |
 | `python tools/docker_test.py` | 以 `0.0.0.0` + 密码模式启动，验证 `/healthz`、401/200、令牌与退出 |
 | `python tools/push_github.py --dry-run` | 不装 git，直接对比本地目录与远端分支：列出将新增/修改/删除的文件，付 token 后一次性提交 |
@@ -354,6 +380,17 @@ git push -u origin main
 ---
 
 ## 常见问题
+
+### 下载到一半断了 / 断电了，要重新下全部吗？
+
+不用。重新点一次「开始下载」即可：没有完成的文件留在 `.tmp` 里，下载器会发
+`Range: bytes=N-` 从断点续传；已经完整的文件会在本地直接跳过（先比大小，有 sha256 时再比哈希）。
+真正会关掉续传的只有「不使用临时文件（`--no-tmp`）」。
+
+### 会不会把已经下好的文件又下一遍？
+
+不会。默认行为就是幂等的 —— 大小一致直接跳过，日志里会出现浅蓝色的 `[skip]` 行，
+任务统计行也会显示 **· 跳过 N**。
 
 **目标机器需要装 Python 吗？**
 不需要。`kemono-dl-gui.exe` 是 PyInstaller 单文件打包，里面已经带了完整的

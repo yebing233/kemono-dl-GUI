@@ -65,6 +65,13 @@ visible: values set in pro mode keep applying after you switch back to simple.
   the same UI on port 8765 with `/downloads` and `/data` volumes. Set
   `KEMONO_DL_GUI_PASSWORD` to put the whole UI behind HTTP Basic auth before you
   publish the port; `GET /healthz` stays open for probes.
+* **Resumable, never re-downloads** — interrupting a run (stop button, crash,
+  power loss) leaves `.tmp` files behind and the next run continues them with
+  `Range: bytes=N-`; files that already match the remote size (or the API's
+  sha256) are skipped instead of fetched again. Retries back off exponentially
+  (2 s → 4 s → 8 s … capped at 30 s) and resume from the same offset. Only
+  `--no-tmp` disables resume — size/hash skipping still applies. Skipped files
+  are logged in light blue and counted as **· 跳过 N** in the job panel.
 
 The CLI stays the single source of truth: each download is a real `kemono-dl`
 subprocess, the log pane shows its untouched output, and the bottom bar shows the

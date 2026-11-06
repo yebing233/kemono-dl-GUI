@@ -1197,6 +1197,8 @@ textarea.input {
 .log-line.is-info { color: var(--text-faint); }
 .log-line.is-info .marker { background: color-mix(in srgb, var(--info) 50%, transparent); }
 .log-line.is-ok { color: #6ee7b7; }
+.log-line.is-skip { color: #7dd3fc; }
+.log-line.is-skip .marker { background: #7dd3fc; }
 .log-line.is-ok .marker { background: var(--ok); }
 .log-line.is-write { color: #c4b5fd; }
 .log-line.is-write .marker { background: var(--accent-2); }
