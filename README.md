@@ -44,6 +44,11 @@ documented below — links, batch files, favourites, save path, output templates
 filters, extension skipping, archive, cookies, per-site logins, `--write-content`,
 `--write-json`, `--restrict-names`, `--no-tmp` and custom template variables.
 
+The UI opens in **simple mode** — paste links, pick a folder, press download, with
+nothing else on screen — and every advanced control lives behind
+**设置 → 专业模式** (the mode badge in the top bar). Switching only changes what is
+visible: values set in pro mode keep applying after you switch back to simple.
+
 * **Zero install (recommended)** — double-click `dist/kemono-dl-gui.exe`. It is a
   single-file build that bundles CPython, `requests` and `kemono_dl`, so the
   target machine needs neither Python nor pip. Rebuild it with
@@ -65,11 +70,12 @@ The CLI stays the single source of truth: each download is a real `kemono-dl`
 subprocess, the log pane shows its untouched output, and the bottom bar shows the
 equivalent command line (passwords masked) so any configuration can be
 reproduced in a terminal. Progress is parsed from the downloader's `\r` repaints,
-so the bar moves while a file is still downloading; pick the
-**仅用帖子标题命名 (不含编号)** template preset
-(`{service}/{creator_id}/{post_title}/{filename}`) to name folders after the post
-title instead of its numeric id, or **帖子标题 + 编号**
-(`{post_title} [{post_id}]`) to keep both.
+so the bar moves while a file is still downloading, and the job panel shows how many files
+are downloaded / still queued plus an estimated remaining size (`≈`, measured from finished
+files — the site API does not expose attachment sizes). Simple mode has a single
+**用帖子标题命名文件夹** switch; in pro mode the template presets
+**仅用帖子标题命名 (不含编号)** (`{service}/{creator_id}/{post_title}/{filename}`) and
+**帖子标题 + 编号** (`{post_title} [{post_id}]`) do the same thing explicitly.
 
 The window is a browser tab served by a loopback-only server. Use **退出程序** in
 the left rail to stop it (closing the tab alone leaves the background process

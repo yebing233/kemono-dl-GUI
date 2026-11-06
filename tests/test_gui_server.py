@@ -79,7 +79,7 @@ class ProgressParsingTests(unittest.TestCase):
 
     @staticmethod
     def line(percent: float, speed: str = "1.2 MB/s", eta: str = "00:00:12") -> str:
-        return f"[downloading] {percent:6.2f}% of 10.0 MB eta {eta} at {speed}"
+        return f"[downloading] {percent:6.2f}% of 10.00 MiB eta {eta} at {speed}"
 
     def job(self) -> server.Job:
         return server.Job("job-1", "demo", ["python", "-u"], {}, kind="download")
@@ -106,7 +106,58 @@ class ProgressParsingTests(unittest.TestCase):
         job.append("[downloading] Post: '限定・セット'")
         job.append("[downloading] Destination: 'a.png'")
         self.assertEqual(job.progress["posts"], 1)
+        # a destination line means the file *started*; it counts as downloaded
+        # only once the next file begins (or the job ends)
+        self.assertEqual(job.progress["files"], 0)
+        job.append("[downloading] Destination: 'b.png'")
         self.assertEqual(job.progress["files"], 1)
+
+    def test_pending_follows_attachment_count(self) -> None:
+        job = self.job()
+        job.append("[downloading] Post: 'one'")
+        job.append("[downloading] Attachments: 3")
+        self.assertEqual(job.progress["pending"], 3)
+        job.append("[downloading] Destination: 'a.png'")
+        job.append(self.line(50.0))
+        self.assertEqual(job.progress["pending"], 3)  # nothing finished yet
+        job.append(self.line(100.0))
+        job.append("[downloading] Destination: 'b.png'")
+        self.assertEqual(job.progress["pending"], 2)
+        self.assertEqual(job.progress["files"], 1)
+
+    def test_bytes_downloaded_and_remaining(self) -> None:
+        job = self.job()
+        job.append("[downloading] Attachments: 4")
+        job.append("[downloading] Destination: 'a.png'")
+        for percent in (25.0, 100.0):
+            job.append(self.line(percent))
+        job.append("[downloading] Destination: 'b.png'")
+        job.append(self.line(50.0))
+        # 10 MiB finished, 5 MiB of the current file done
+        self.assertEqual(job.progress["downloaded"], 15 * 1024 * 1024)
+        # 5 MiB left in the current file + 2 queued files at the 10 MiB average
+        self.assertEqual(job.progress["remaining"], 25 * 1024 * 1024)
+        self.assertEqual(job.progress["bytesPerFile"], 10 * 1024 * 1024)
+        self.assertEqual(job.progress["pending"], 3)
+
+    def test_finish_progress_clears_pending(self) -> None:
+        job = self.job()
+        job.append("[downloading] Attachments: 2")
+        job.append("[downloading] Destination: 'a.png'")
+        job.append(self.line(42.0))
+        job.finish_progress(success=False)
+        self.assertEqual(job.progress["pending"], 0)
+        self.assertEqual(job.progress["remaining"], 0)
+        self.assertAlmostEqual(job.progress["percent"], 42.0)
+
+        job = self.job()
+        job.append("[downloading] Attachments: 1")
+        job.append("[downloading] Destination: 'a.png'")
+        job.append(self.line(100.0))
+        job.finish_progress(success=True)
+        self.assertEqual(job.progress["percent"], 100.0)
+        self.assertEqual(job.progress["files"], 1)
+        self.assertEqual(job.progress["pending"], 0)
 
     def test_next_file_restarts_the_bar(self) -> None:
         job = self.job()

@@ -9,7 +9,7 @@
 <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
+<body data-mode="simple">
 
 <svg class="sprite" aria-hidden="true">
   <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.4 4.53"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.41-1.41"/></symbol>
@@ -36,6 +36,7 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
   <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.8 6.8a8 8 0 1 0 10.4 0"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2.2M12 19.2v2.2M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.4 19.6 6 18M18 6l1.6-1.6"/></symbol>
 </svg>
 
 <div class="app">
@@ -49,9 +50,10 @@
     <nav class="rail-nav">
       <a class="rail-link is-active" href="#sec-links"><svg class="icon"><use href="#i-link"/></svg><span>链接</span></a>
       <a class="rail-link" href="#sec-output"><svg class="icon"><use href="#i-folder"/></svg><span>保存位置</span></a>
-      <a class="rail-link" href="#sec-template"><svg class="icon"><use href="#i-tag"/></svg><span>命名模板</span></a>
-      <a class="rail-link" href="#sec-filters"><svg class="icon"><use href="#i-filter"/></svg><span>过滤</span></a>
-      <a class="rail-link" href="#sec-account"><svg class="icon"><use href="#i-key"/></svg><span>账号</span></a>
+      <a class="rail-link" href="#sec-naming-simple" data-simple><svg class="icon"><use href="#i-tag"/></svg><span>命名方式</span></a>
+      <a class="rail-link" href="#sec-template" data-adv><svg class="icon"><use href="#i-tag"/></svg><span>命名模板</span></a>
+      <a class="rail-link" href="#sec-filters" data-adv><svg class="icon"><use href="#i-filter"/></svg><span>过滤</span></a>
+      <a class="rail-link" href="#sec-account" data-adv><svg class="icon"><use href="#i-key"/></svg><span>账号</span></a>
       <a class="rail-link" href="#sec-jobs"><svg class="icon"><use href="#i-layers"/></svg><span>任务与日志</span></a>
     </nav>
 
@@ -60,6 +62,9 @@
         <span class="badge" id="badgeVersion" title="kemono-dl 版本">v—</span>
         <span class="badge badge-ok" id="badgeDeps" title="Python 依赖状态">检测中</span>
       </div>
+      <button class="rail-link rail-button" id="openSettings" type="button">
+        <svg class="icon"><use href="#i-gear"/></svg><span>设置</span>
+      </button>
       <button class="rail-link rail-button" id="openAbout" type="button">
         <svg class="icon"><use href="#i-info"/></svg><span>关于与 CLI 对照</span>
       </button>
@@ -77,9 +82,13 @@
     <header class="topbar">
       <div class="topbar-title">
         <h1>新建下载</h1>
-        <p>kemono · coomer · pawchive —— 命令行里的每一项能力，都在这里。</p>
+        <p data-simple>粘贴链接 → 选好文件夹 → 点「开始下载」，就这三步。</p>
+        <p data-adv>kemono · coomer · pawchive —— 命令行里的每一项能力，都在这里。</p>
       </div>
       <div class="topbar-actions">
+        <button class="pill pill-button" id="modePill" type="button" title="界面模式 · 点击打开设置">
+          <svg class="icon"><use href="#i-gear"/></svg><span id="modePillText">简单模式</span>
+        </button>
         <span class="pill" id="connPill"><i class="dot dot-ok"></i><span>本地服务已连接</span></span>
         <button class="icon-btn" id="btnRefreshMeta" type="button" title="重新检测环境">
           <svg class="icon"><use href="#i-refresh"/></svg>
@@ -105,14 +114,14 @@
           <header class="card-head">
             <span class="card-icon"><svg class="icon"><use href="#i-link"/></svg></span>
             <div>
-              <h2>下载链接</h2>
-              <p>创作者主页会下载其全部帖子，帖子链接只下载该帖。</p>
+              <h2><span class="step-badge">1</span>要下载什么</h2>
+              <p>把作者主页或帖子链接粘到下面，一行一个；作者主页会把他的帖子全下下来。</p>
             </div>
             <span class="card-meta" id="urlCount">0 条</span>
           </header>
           <div class="card-body">
             <div class="field">
-              <label for="urls">链接列表 <span class="hint">每行一个，<code>#</code> 开头的行会被忽略</span></label>
+              <label for="urls">链接 <span class="hint">每行一个，<code>#</code> 开头的行会被忽略</span></label>
               <textarea id="urls" class="input mono" rows="5" spellcheck="false"
                 placeholder="https://kemono.cr/patreon/user/12345&#10;https://coomer.st/onlyfans/user/67890/post/11111"></textarea>
             </div>
@@ -124,7 +133,7 @@
               <button class="link-btn" id="btnClearUrls" type="button">清空</button>
             </div>
 
-            <div class="field">
+            <div class="field" data-adv>
               <label>批次文件 <span class="hint">支持多个 .txt，一行一个链接</span></label>
               <label class="dropzone dropzone-inline" id="batchDrop" tabindex="0">
                 <svg class="icon"><use href="#i-file"/></svg>
@@ -134,7 +143,7 @@
               <div class="file-list" id="batchList"></div>
             </div>
 
-            <div class="field">
+            <div class="field" data-adv>
               <label>收藏创作者 <span class="hint">需要 cookies 或登录状态</span></label>
               <div class="chip-toggle-row">
                 <label class="chip-toggle"><input type="checkbox" id="favKemono"><span>Kemono 收藏</span></label>
@@ -150,8 +159,8 @@
           <header class="card-head">
             <span class="card-icon"><svg class="icon"><use href="#i-folder"/></svg></span>
             <div>
-              <h2>保存位置</h2>
-              <p>所有文件都相对于此目录，模板可以再往下建子目录。</p>
+              <h2><span class="step-badge">2</span>保存到哪里</h2>
+              <p>点「浏览」挑一个文件夹，下载的东西都会放在里面。</p>
             </div>
           </header>
           <div class="card-body">
@@ -170,12 +179,12 @@
             </div>
 
             <div class="switch-grid">
-              <label class="switch-row">
+              <label class="switch-row" data-adv>
                 <input type="checkbox" id="swRestrict">
                 <span class="switch"></span>
                 <span class="switch-text"><b>限制为 ASCII 文件名</b><em>--restrict-names</em></span>
               </label>
-              <label class="switch-row">
+              <label class="switch-row" data-adv>
                 <input type="checkbox" id="swNoTmp">
                 <span class="switch"></span>
                 <span class="switch-text"><b>不使用 .tmp 文件</b><em>--no-tmp · 直接写入目标文件</em></span>
@@ -183,9 +192,9 @@
               <label class="switch-row">
                 <input type="checkbox" id="swWriteContent">
                 <span class="switch"></span>
-                <span class="switch-text"><b>保存帖子正文</b><em>--write-content · 输出 HTML</em></span>
+                <span class="switch-text"><b>顺带保存帖子文字</b><em>--write-content · 正文另存为 HTML</em></span>
               </label>
-              <label class="switch-row">
+              <label class="switch-row" data-adv>
                 <input type="checkbox" id="swWriteJson">
                 <span class="switch"></span>
                 <span class="switch-text"><b>保存帖子 JSON</b><em>--write-json · 输出原始 API 响应</em></span>
@@ -194,12 +203,35 @@
           </div>
         </section>
 
-        <!-- template -->
-        <section class="card" id="sec-template">
+        <!-- simple naming (simple mode) -->
+        <section class="card" id="sec-naming-simple" data-simple>
           <header class="card-head">
             <span class="card-icon"><svg class="icon"><use href="#i-tag"/></svg></span>
             <div>
-              <h2>命名模板</h2>
+              <h2><span class="step-badge">3</span>文件怎么命名</h2>
+              <p>默认用帖子编号当文件夹；想让文件夹名看得懂，就把下面的开关打开。</p>
+            </div>
+          </header>
+          <div class="card-body">
+            <label class="switch-row switch-row-plain">
+              <input type="checkbox" id="swTitleNames">
+              <span class="switch"></span>
+              <span class="switch-text"><b>用帖子标题命名文件夹</b><em class="keep-note">编号会保留在方括号里，方便回查原帖</em></span>
+            </label>
+            <p class="simple-preview">实际效果：<code id="simpleNamePreview">patreon/12345/67890/attachment.png</code></p>
+            <p class="hint hint-block">
+              想要自定义模板、日期过滤、cookies、登录？
+              <button class="link-btn" id="openSettingsLink" type="button">打开设置 → 专业模式</button>
+            </p>
+          </div>
+        </section>
+
+        <!-- template -->
+        <section class="card" id="sec-template" data-adv>
+          <header class="card-head">
+            <span class="card-icon"><svg class="icon"><use href="#i-tag"/></svg></span>
+            <div>
+              <h2><span class="step-badge">3</span>文件怎么命名</h2>
               <p>用变量拼出文件路径，右侧会按示例数据实时预览。</p>
             </div>
             <select class="select select-sm" id="presetSelect" title="模板预设">
@@ -266,11 +298,11 @@
         </section>
 
         <!-- filters -->
-        <section class="card" id="sec-filters">
+        <section class="card" id="sec-filters" data-adv>
           <header class="card-head">
             <span class="card-icon"><svg class="icon"><use href="#i-filter"/></svg></span>
             <div>
-              <h2>过滤</h2>
+              <h2><span class="step-badge">4</span>只下载一部分</h2>
               <p>按日期或扩展名挑选要下载的内容。</p>
             </div>
           </header>
@@ -309,11 +341,11 @@
         </section>
 
         <!-- account -->
-        <section class="card" id="sec-account">
+        <section class="card" id="sec-account" data-adv>
           <header class="card-head">
             <span class="card-icon"><svg class="icon"><use href="#i-key"/></svg></span>
             <div>
-              <h2>账号</h2>
+              <h2><span class="step-badge">5</span>需要登录的内容</h2>
               <p>cookies 用于受限内容与收藏；登录会在启动时先换取会话。</p>
             </div>
           </header>
@@ -390,12 +422,15 @@
             <div class="progress"><div class="progress-bar" id="jobProgressBar"></div></div>
             <div class="progress-meta">
               <span id="jobPercent">0%</span>
+              <span id="jobSize">—</span>
               <span id="jobSpeed">—</span>
               <span id="jobEta">—</span>
             </div>
             <div class="job-stats">
               <div><b id="jobPosts">0</b><em>帖子</em></div>
-              <div><b id="jobFiles">0</b><em>文件</em></div>
+              <div><b id="jobFiles">0</b><em>已下载</em></div>
+              <div><b id="jobPending">0</b><em>待下载</em></div>
+              <div><b id="jobRemaining">—</b><em>剩余大小</em></div>
               <div><b id="jobElapsed">0s</b><em>耗时</em></div>
             </div>
             <div class="job-actions">
@@ -427,7 +462,7 @@
 
     <!-- sticky action bar -->
     <div class="actionbar">
-      <div class="cmd-preview" title="等价命令行">
+      <div class="cmd-preview" title="等价命令行" data-adv>
         <svg class="icon"><use href="#i-terminal"/></svg>
         <code id="cmdPreview">kemono-dl …</code>
         <button class="icon-btn" id="btnCopyCmd" type="button" title="复制命令">
@@ -511,7 +546,8 @@
           <tr><td><code>--version</code></td><td>打印版本号</td><td>左侧栏版本徽标 / 本面板</td></tr>
         </tbody>
       </table>
-      <p class="hint hint-block">GUI 不重新实现下载逻辑：每次运行都会以 <code>python -m kemono_dl …</code> 启动真实 CLI，参数与上表一一对应，因此行为与命令行完全一致。</p>
+      <p class="hint hint-block">下表位置对应「专业模式」；简单模式只保留链接、保存位置、命名方式三项。
+        GUI 不重新实现下载逻辑：每次运行都会以 <code>python -m kemono_dl …</code> 启动真实 CLI，参数与上表一一对应，因此行为与命令行完全一致。</p>
     </div>
     <footer class="modal-foot">
       <span class="hint">本地服务仅监听 127.0.0.1，并校验会话令牌。</span>
@@ -520,6 +556,43 @@
         <svg class="icon"><use href="#i-external"/></svg>上游仓库
       </a>
       <button class="btn btn-primary btn-sm" data-close type="button">关闭</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ───────────────────────── settings ───────────────────────── -->
+<div class="modal" id="settingsModal" hidden>
+  <div class="modal-panel">
+    <header class="modal-head">
+      <h3>设置</h3>
+      <button class="icon-btn" data-close type="button"><svg class="icon"><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <label class="switch-row">
+        <input type="checkbox" id="swProMode">
+        <span class="switch"></span>
+        <span class="switch-text">
+          <b>专业模式</b>
+          <em>打开后显示全部选项：命名模板、日期过滤、扩展名过滤、归档、cookies、登录、自定义变量、命令行预览</em>
+        </span>
+      </label>
+      <p class="hint hint-block">
+        简单模式只留日常要做的三件事：粘贴链接、选保存位置、开始下载。专业模式里改过的东西不会因为切回简单模式而丢失，
+        只是暂时不显示。
+      </p>
+      <div class="settings-actions">
+        <button class="btn btn-ghost btn-sm" id="settingsTheme" type="button">
+          <svg class="icon"><use href="#i-sun"/></svg><span id="settingsThemeLabel">切换浅色主题</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" id="settingsAbout" type="button">
+          <svg class="icon"><use href="#i-info"/></svg>关于与 CLI 对照
+        </button>
+      </div>
+    </div>
+    <footer class="modal-foot">
+      <span class="hint">模式与主题只保存在本机浏览器里。</span>
+      <div class="grow"></div>
+      <button class="btn btn-primary btn-sm" data-close type="button">完成</button>
     </footer>
   </div>
 </div>

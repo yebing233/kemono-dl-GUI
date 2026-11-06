@@ -1,4 +1,4 @@
-# 不要把本地产物塞进 Docker 构建上下文
+# Keep the Docker build context small and reproducible.
 .git
 .github
 .build
@@ -12,3 +12,8 @@ __pycache__
 .venv
 venv
 node_modules
+docs
+tests
+tools
+*.spec
+*.bat

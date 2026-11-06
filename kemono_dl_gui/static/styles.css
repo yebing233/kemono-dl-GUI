@@ -1113,7 +1113,7 @@ textarea.input {
   margin-top: -3px;
 }
 
-.job-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.job-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(54px, 1fr)); gap: 6px; }
 .job-stats > div {
   display: flex;
   flex-direction: column;
@@ -1514,4 +1514,81 @@ textarea.input {
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+}
+
+/* ── 简单模式 / 专业模式 ─────────────────────────────────── */
+
+body[data-mode="simple"] [data-adv],
+body[data-mode="pro"] [data-simple] {
+  display: none !important;
+}
+
+/* 简单模式里不展示 CLI 参数名，避免术语干扰 */
+body[data-mode="simple"] .switch-text em:not(.keep-note) {
+  display: none;
+}
+
+body[data-mode="simple"] .switch-grid {
+  grid-template-columns: 1fr;
+}
+
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #0a0b10;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 6px 16px -10px var(--accent);
+  vertical-align: 1px;
+}
+
+.pill-button {
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-dim);
+  border-color: var(--border);
+  background: var(--surface-2);
+  transition: color .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.pill-button .icon { width: 13px; height: 13px; }
+
+.pill-button:hover {
+  color: var(--text);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.simple-preview {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.simple-preview code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  body[data-mode="simple"] .pill-button span { display: none; }
 }

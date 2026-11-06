@@ -89,6 +89,28 @@ PROGRESS_PATTERN = re.compile(
 )
 #: Percent step between two progress lines kept in the log pane.
 PROGRESS_LOG_STEP = 5.0
+#: ``kemono_dl.utils.format_bytes`` renders sizes as e.g. ``12.34 MiB``.
+SIZE_PATTERN = re.compile(r"^(?P<value>\d+(?:\.\d+)?) (?P<unit>B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)$")
+SIZE_UNITS = {
+    "B": 1.0,
+    "KiB": 1024.0,
+    "MiB": 1024.0 ** 2,
+    "GiB": 1024.0 ** 3,
+    "TiB": 1024.0 ** 4,
+    "KB": 1000.0,
+    "MB": 1000.0 ** 2,
+    "GB": 1000.0 ** 3,
+    "TB": 1000.0 ** 4,
+}
+
+
+def parse_bytes(text: str) -> float:
+    """Turn ``"12.34 MiB"`` into a byte count (0.0 when unparsable)."""
+    match = SIZE_PATTERN.match((text or "").strip())
+    if not match:
+        return 0.0
+    return float(match.group("value")) * SIZE_UNITS[match.group("unit")]
+
 
 
 # --------------------------------------------------------------------------- #
@@ -230,11 +252,32 @@ class Job:
         self.finished_at: float | None = None
         self.lines: list[str] = []
         self.dropped = 0
-        self.progress: dict[str, Any] = {"percent": 0.0, "total": "", "eta": "", "speed": "", "posts": 0, "files": 0}
+        self.progress: dict[str, Any] = {
+            "percent": 0.0,
+            "total": "",
+            "eta": "",
+            "speed": "",
+            "posts": 0,
+            "files": 0,
+            "pending": 0,
+            "downloaded": 0,
+            "remaining": 0,
+            "bytesPerFile": 0,
+        }
         self.process: subprocess.Popen[str] | None = None
         self.stop_requested = False
         self.lock = threading.Lock()
         self._logged_percent = 0.0
+        #: bytes of files that finished downloading (``_finished_bytes``) plus the
+        #: size of the file currently in flight (``_current_total``).
+        self._finished_bytes = 0.0
+        self._current_total = 0.0
+        #: attachment count announced by ``[downloading] Attachments: N``.
+        self._expected_files = 0
+        #: files handed to ``download_file`` so far (the last one may be running).
+        self._started = 0
+        self._in_file = False
+
 
     # -- log ---------------------------------------------------------------
     def append(self, line: str) -> None:
@@ -251,6 +294,45 @@ class Job:
             del self.lines[:trim]
             self.dropped += trim
 
+    def _refresh_totals(self) -> None:
+        """Recompute the byte/file counters (caller holds :attr:`lock`).
+
+        Only the file currently in flight has a known total size, so the size of
+        the files still queued is estimated from the average of the files that
+        already finished — the UI labels it with ``≈``.
+        """
+        percent = min(float(self.progress.get("percent", 0.0)), 100.0)
+        current_done = self._current_total * percent / 100.0
+        finished_files = max(0, self._started - (1 if self._in_file else 0))
+        in_flight = 1 if self._in_file else 0
+        pending_files = max(0, self._expected_files - finished_files)
+        average = self._finished_bytes / finished_files if finished_files else 0.0
+        queued = max(0, pending_files - in_flight)
+        remaining = max(0.0, self._current_total - current_done) + average * queued
+        self.progress.update(
+            files=finished_files,
+            pending=pending_files,
+            downloaded=int(self._finished_bytes + current_done),
+            remaining=int(remaining),
+            bytesPerFile=int(average),
+        )
+
+    def finish_progress(self, success: bool) -> None:
+        """Settle the counters when the child process is gone."""
+        with self.lock:
+            if self._in_file:
+                percent = 100.0 if success else min(float(self.progress.get("percent", 0.0)), 100.0)
+                self._finished_bytes += self._current_total * percent / 100.0
+                self._in_file = False
+            self._refresh_totals()
+            # nothing is queued any more, so the "still to download" tiles stop
+            # counting and a successful run ends at 100 %
+            self.progress["pending"] = 0
+            self.progress["remaining"] = 0
+            if success and self._started:
+                self.progress["percent"] = 100.0
+                self.progress["eta"] = ""
+
     def _progress_tick(self, line: str) -> bool:
         """Feed one stdout line into :attr:`progress`; True when it was a tick.
 
@@ -263,22 +345,38 @@ class Job:
         match = PROGRESS_PATTERN.match(stripped)
         if match:
             percent = float(match.group("percent"))
+            self._current_total = parse_bytes(match.group("total"))
+            self._in_file = True
             self.progress.update(
                 percent=percent,
                 total=match.group("total"),
                 eta=match.group("eta"),
                 speed=match.group("speed"),
             )
+            self._refresh_totals()
             if percent >= 99.5 or percent - self._logged_percent >= PROGRESS_LOG_STEP:
                 self._logged_percent = percent
                 self._push(stripped)
             return True
         if stripped.startswith("[downloading] Post:"):
             self.progress["posts"] += 1
+        elif stripped.startswith("[downloading] Attachments:"):
+            try:
+                count = int(stripped.rsplit(":", 1)[1].strip())
+            except (IndexError, ValueError):
+                count = 0
+            self._expected_files += max(0, count)
         elif stripped.startswith("[downloading] Destination:"):
-            self.progress["files"] += 1
+            # printed just before a file starts, so the previous one is finished
+            if self._in_file:
+                percent = min(float(self.progress.get("percent", 0.0)), 100.0)
+                self._finished_bytes += self._current_total * percent / 100.0
+            self._current_total = 0.0
+            self._started += 1
+            self._in_file = True
             self.progress["percent"] = 0.0
             self._logged_percent = 0.0
+        self._refresh_totals()
         return False
 
     def lines_since(self, since: int) -> tuple[int, list[str]]:
@@ -450,12 +548,14 @@ class JobManager:
         if job.stop_requested:
             job.status = "stopped"
             job.append("[gui] 任务已被用户停止")
+            job.finish_progress(success=False)
         elif process.returncode == 0:
             job.status = "done"
-            job.progress["percent"] = 100.0
+            job.finish_progress(success=True)
             job.append(f"[gui] 完成 · 用时 {job.finished_at - (job.started_at or job.finished_at):.1f} 秒")
         else:
             job.status = "failed"
+            job.finish_progress(success=False)
             job.append(f"[gui] 进程退出码 {process.returncode}")
 
 

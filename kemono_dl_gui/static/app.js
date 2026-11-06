@@ -7,6 +7,7 @@
 const TOKEN = document.querySelector('meta[name="gui-token"]').content;
 const STORAGE_KEY = 'kemono-dl-gui.config.v2';
 const THEME_KEY = 'kemono-dl-gui.theme';
+const MODE_KEY = 'kemono-dl-gui.mode';
 const $ = (id) => document.getElementById(id);
 
 const DATE_DEFS = [
@@ -57,6 +58,7 @@ const APP = {
   fsSelectedFile: null,
   fsCallback: null,
   running: false,
+  mode: 'simple',
 };
 
 /* ── tiny helpers ─────────────────────────────────────────── */
@@ -87,6 +89,17 @@ function debounce(fn, wait) {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), wait);
   };
+}
+
+function formatBytes(bytes) {
+  let value = Number(bytes) || 0;
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
 function formatDuration(seconds) {
@@ -274,6 +287,7 @@ function applyConfig(cfg) {
   syncDateRows();
   syncLoginStates();
   syncTemplateMode();
+  syncTitleNames();
 }
 
 /* ── rendering of dynamic bits ────────────────────────────── */
@@ -789,11 +803,20 @@ function renderSelectedJob(job) {
   $('jobPercent').textContent = indeterminate
     ? '准备中…'
     : `${percent.toFixed(1)}%${job.progress.total ? ` · ${job.progress.total}` : ''}`;
+  const done = job.progress.downloaded || 0;
+  const left = job.progress.remaining || 0;
+  $('jobSize').textContent = done ? `已下载 ${formatBytes(done)}` : '—';
   $('jobSpeed').textContent = job.progress.speed || '—';
   $('jobEta').textContent = job.progress.eta ? `剩余 ${job.progress.eta}` : '—';
 
   $('jobPosts').textContent = job.progress.posts || 0;
   $('jobFiles').textContent = job.progress.files || 0;
+  const pending = job.progress.pending || 0;
+  $('jobPending').textContent = job.status === 'done' ? 0 : pending;
+  $('jobRemaining').textContent = left > 0 ? `≈${formatBytes(left)}` : '—';
+  $('jobRemaining').title = left > 0
+    ? `按已完成文件的平均大小估算${job.progress.bytesPerFile ? `（平均 ${formatBytes(job.progress.bytesPerFile)}/个）` : ''}`
+    : '';
   const start = job.startedAt || job.createdAt;
   const end = job.finishedAt || (job.startedAt ? Date.now() / 1000 : null);
   $('jobElapsed').textContent = end ? formatDuration(end - start) : '—';
@@ -1039,6 +1062,7 @@ function openAbout() {
 
 function closeModals() {
   $('aboutModal').hidden = true;
+  $('settingsModal').hidden = true;
   closeFsModal();
 }
 
@@ -1064,6 +1088,8 @@ function applyTheme(theme) {
   const icon = $('themeIcon').querySelector('use');
   icon.setAttribute('href', theme === 'dark' ? '#i-sun' : '#i-moon');
   $('themeLabel').textContent = theme === 'dark' ? '浅色主题' : '深色主题';
+  const settingsThemeLabel = $('settingsThemeLabel');
+  if (settingsThemeLabel) settingsThemeLabel.textContent = theme === 'dark' ? '切换浅色主题' : '切换深色主题';
   try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
 }
 
@@ -1075,6 +1101,75 @@ function initTheme() {
     else if (window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light';
   } catch { /* ignore */ }
   applyTheme(theme);
+}
+
+/* ── 简单模式 / 专业模式 ─────────────────────────────────── */
+
+const TITLE_TEMPLATE = '{service}/{creator_id}/{post_title}/{filename}';
+const TITLE_ID_TEMPLATE = '{service}/{creator_id}/{post_title} [{post_id}]/{filename}';
+const FALLBACK_TEMPLATE = '{service}/{creator_id}/{post_id}/{filename}';
+
+const SAMPLE_VARS = {
+  service: 'patreon',
+  creator_id: '12345',
+  creator_name: 'Some Creator',
+  post_id: '67890',
+  post_title: '限定・ステッカー セット',
+  filename: 'attachment.png',
+  file_name: 'attachment',
+  file_ext: 'png',
+  server_filename: 'ke20190416_1.jpg',
+  index: '1',
+};
+
+function activeTemplate() {
+  if ($('swSplit').checked) return ($('tAttachments').value || '').trim();
+  return ($('templateInput').value || '').trim();
+}
+
+function previewPathFor(template) {
+  const source = (template || '').trim() || FALLBACK_TEMPLATE;
+  const rendered = source.replace(/\{([a-z_]+)\}/g, (whole, name) => (
+    Object.prototype.hasOwnProperty.call(SAMPLE_VARS, name) ? SAMPLE_VARS[name] : whole
+  ));
+  return rendered.replace(/[\\/]+/g, '/').replace(/^\/+/, '');
+}
+
+function syncTitleNames() {
+  const template = activeTemplate();
+  const on = template === TITLE_TEMPLATE || template === TITLE_ID_TEMPLATE;
+  const toggle = $('swTitleNames');
+  if (toggle) toggle.checked = on;
+  const preview = $('simpleNamePreview');
+  if (preview) preview.textContent = previewPathFor(template);
+}
+
+function applyMode(mode, persist = true) {
+  const next = mode === 'pro' ? 'pro' : 'simple';
+  APP.mode = next;
+  document.body.dataset.mode = next;
+  const pillText = $('modePillText');
+  if (pillText) pillText.textContent = next === 'pro' ? '专业模式' : '简单模式';
+  const pill = $('modePill');
+  if (pill) pill.title = next === 'pro' ? '当前：专业模式 · 点击打开设置' : '当前：简单模式 · 点击打开设置';
+  const toggle = $('swProMode');
+  if (toggle) toggle.checked = next === 'pro';
+  if (persist) {
+    try { localStorage.setItem(MODE_KEY, next); } catch { /* ignore */ }
+  }
+  syncTitleNames();
+}
+
+function loadMode() {
+  try {
+    const stored = localStorage.getItem(MODE_KEY);
+    if (stored === 'pro' || stored === 'simple') return stored;
+  } catch { /* ignore */ }
+  return 'simple';
+}
+
+function openSettings() {
+  $('settingsModal').hidden = false;
 }
 
 /* ── wiring ───────────────────────────────────────────────── */
@@ -1094,6 +1189,7 @@ function wireEvents() {
         };
       }
       changed();
+      if (id === 'templateInput' || id.startsWith('t')) syncTitleNames();
     });
     el.addEventListener('focus', () => {
       if (['templateInput', 'tAttachments', 'tContent', 'tJson'].includes(id)) APP.lastTemplateInput = el;
@@ -1123,6 +1219,7 @@ function wireEvents() {
       APP.templates.attachments = option.dataset.template;
     }
     event.target.value = '';
+    syncTitleNames();
     changed();
   });
 
@@ -1257,6 +1354,36 @@ function wireEvents() {
 
   $('btnQuit').addEventListener('click', quitApp);
 
+  $('openSettings').addEventListener('click', openSettings);
+  $('modePill').addEventListener('click', openSettings);
+  $('openSettingsLink').addEventListener('click', openSettings);
+  $('settingsAbout').addEventListener('click', () => {
+    $('settingsModal').hidden = true;
+    openAbout();
+  });
+  $('settingsTheme').addEventListener('click', () => {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  $('swProMode').addEventListener('change', (event) => {
+    applyMode(event.target.checked ? 'pro' : 'simple');
+    $('settingsModal').hidden = true;
+    toast(event.target.checked
+      ? '已打开专业模式：全部选项都会显示。'
+      : '已切回简单模式：高级选项先收起来，之前的设置仍然保留。', 'info');
+  });
+  $('swTitleNames').addEventListener('change', () => {
+    const template = $('swTitleNames').checked
+      ? TITLE_ID_TEMPLATE
+      : ((APP.meta && APP.meta.defaultTemplate) ? APP.meta.defaultTemplate : FALLBACK_TEMPLATE);
+    $('templateInput').value = template;
+    $('tAttachments').value = template;
+    $('tContent').value = template;
+    $('tJson').value = template;
+    APP.templates = { attachments: template, content: template, json: template };
+    syncTitleNames();
+    changed();
+  });
+
   document.querySelectorAll('[data-close]').forEach((btn) => btn.addEventListener('click', closeModals));
   document.querySelectorAll('.modal').forEach((modal) => {
     modal.addEventListener('mousedown', (event) => {
@@ -1323,6 +1450,7 @@ function initScrollSpy() {
 
 async function boot() {
   initTheme();
+  applyMode(loadMode(), false);
   renderDateRows();
   renderPresets();
   renderVarChips();
