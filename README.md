@@ -53,6 +53,13 @@ visible: values set in pro mode keep applying after you switch back to simple.
   single-file build that bundles CPython, `requests` and `kemono_dl`, so the
   target machine needs neither Python nor pip. Rebuild it with
   `python tools/build_exe.py` (or `构建便携版.bat` on Windows).
+* **Fully portable** — the exe writes only next to itself: downloads land in
+  `Download\` (created on first launch), and `history.jsonl`,
+  `custom-template-variables.json` and `uploads\` sit beside the executable, so
+  the whole folder can move to a USB stick. A read-only program folder falls
+  back to `~/Downloads/kemono-dl` + `%LOCALAPPDATA%\kemono-dl-gui`; override with
+  `KEMONO_DL_GUI_DOWNLOAD_DIR`, `KEMONO_DL_GUI_HISTORY_DIR` and
+  `KEMONO_DL_GUI_DATA`. Details: [docs/GUI.md](docs/GUI.md#便携版的文件放在哪里).
 * **From source** — `pip install -r requirements.txt`, then `python -m kemono_dl_gui`
   (or double-click `启动 GUI.bat` on Windows).
 * **After `pip install .`** — run `kemono-dl-gui`.

@@ -49,10 +49,19 @@ INDEX_HTML = STATIC_DIR / "index.html"
 VERSION_MODULE = REPO_ROOT / "kemono_dl" / "version.py"
 
 def app_data_dir() -> Path:
-    """Where uploads and generated helper files live."""
+    """Where uploads, generated helper files and the history live.
+
+    The packaged exe is portable: everything it writes stays in the folder that
+    holds ``kemono-dl-gui.exe`` (only falling back to the user profile when that
+    folder is read-only, e.g. ``C:\\Program Files``).
+    """
     override = os.environ.get("KEMONO_DL_GUI_DATA")
     if override:
         return Path(override).expanduser()
+    if FROZEN:
+        beside = portable_dir()
+        if writable_dir(beside):
+            return beside
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
     if base:
         return Path(base) / "kemono-dl-gui"
@@ -122,6 +131,9 @@ DATA_ENV = "KEMONO_DL_GUI_DATA"
 DOWNLOAD_DIR_ENV = "KEMONO_DL_GUI_DOWNLOAD_DIR"
 PASSWORD_ENV = "KEMONO_DL_GUI_PASSWORD"
 HISTORY_DIR_ENV = "KEMONO_DL_GUI_HISTORY_DIR"
+
+#: Name of the default download folder created next to the portable exe.
+DOWNLOAD_FOLDER = "Download"
 
 MAX_LOG_LINES = 20000
 PROGRESS_PATTERN = re.compile(
@@ -210,11 +222,20 @@ def basic_auth_ok(header: str, password: str) -> bool:
 
 
 def default_download_path() -> str:
+    """Default destination for downloads.
+
+    Portable exe → ``<exe folder>\\Download`` so a copy on a USB stick keeps the
+    downloads next to itself; read-only program folder → the classic
+    ``~/Downloads/kemono-dl``. ``KEMONO_DL_GUI_DOWNLOAD_DIR`` always wins
+    (used by the Docker image, where it points at the mounted volume).
+    """
     override = os.environ.get(DOWNLOAD_DIR_ENV)
     if override:
         return str(Path(override).expanduser())
-    downloads = Path.home() / "Downloads"
-    return str(downloads / "kemono-dl")
+    beside = portable_dir()
+    if writable_dir(beside):
+        return str(beside / DOWNLOAD_FOLDER)
+    return str(Path.home() / "Downloads" / "kemono-dl")
 
 
 def gui_version() -> str:
@@ -1336,6 +1357,12 @@ def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) ->
             pass
 
     STATE = AppState()
+    # Make the default destination visible straight away, so the folder the GUI
+    # points at actually exists before the first download.
+    try:
+        Path(default_download_path()).mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     try:
         server = create_server(host, port)
     except OSError as exc:

@@ -110,6 +110,38 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 
 ---
 
+## 便携版的文件放在哪里
+
+把 `kemono-dl-gui.exe` 放在任意文件夹（比如 `E:\kemono-dl\`），双击运行后，它
+**只在这个文件夹里写东西**，整个目录可以直接拷到 U 盘或另一台电脑继续用：
+
+```
+E:\kemono-dl\
+├─ kemono-dl-gui.exe                 程序本体（内置 Python 与依赖）
+├─ Download\                         默认下载目录，首次启动自动创建
+│  └─ patreon\snegovski [14268277]\141827377\…
+├─ history.jsonl                     下载记录（作者 / 帖子 / 时间），「下载记录」面板用
+├─ custom-template-variables.json    命名模板里的自定义变量（每次运行按界面内容重写）
+└─ uploads\                          你在界面里上传的 cookies、批次文件副本
+```
+
+| 内容 | 位置 | 说明 |
+| --- | --- | --- |
+| 下载结果 | `Download\` | 「保存位置」的默认值；换目录请直接改界面里的路径 |
+| 下载记录 | `history.jsonl` | 也可以 `KEMONO_DL_GUI_HISTORY_DIR` 指到别处 |
+| 自定义变量 | `custom-template-variables.json` | 启动时会按界面里的内容重新生成 |
+| 上传文件 | `uploads\` | 拖进来的 cookies / 批次文件会复制一份到这里 |
+
+如果程序放在**没有写权限**的目录（例如 `C:\Program Files\`），它会自动回退：
+下载落到 `%USERPROFILE%\Downloads\kemono-dl`，记录与上传文件落到
+`%LOCALAPPDATA%\kemono-dl-gui`。想强制指定，可用环境变量
+`KEMONO_DL_GUI_DATA`、`KEMONO_DL_GUI_HISTORY_DIR`、`KEMONO_DL_GUI_DOWNLOAD_DIR`。
+
+> 源码方式运行（`python -m kemono_dl_gui`）时同样以仓库根目录为「程序目录」，
+> 所以默认下载到 `<仓库>\Download`。
+
+---
+
 ## 简单模式与专业模式
 
 界面默认是**简单模式**：一屏只留三件事——粘贴链接、选保存位置、开始下载。
@@ -191,7 +223,7 @@ docker pull ghcr.io/yebing233/kemono-dl-gui:latest
 | `--favorite-creators-kemono` | 「链接」→ 收藏创作者开关 | Kemono 收藏 |
 | `--favorite-creators-coomer` | 同上 | Coomer 收藏 |
 | `--favorite-creators-pawchive` | 同上 | Pawchive 收藏 |
-| `--path PATH` | 「保存位置」→ 保存目录 | 默认 `~/Downloads/kemono-dl`，可用内置目录选择器浏览磁盘 |
+| `--path PATH` | 「保存位置」→ 保存目录 | 便携版默认是 `kemono-dl-gui.exe` 旁边的 `Download` 文件夹；源码运行时是仓库里的 `Download`；都写不了才退回 `~/Downloads/kemono-dl`。可用内置目录选择器浏览磁盘 |
 | `--output TEMPLATE` | 「命名模板」→ 自定义模板 | 单个模板时只传一条 `--output` |
 | `--output attachments:T` 等 | 「命名模板」→ 分段模板 | 打开后分别填写附件 / 正文 / JSON 三套模板，等价于传三条带类型前缀的 `--output` |
 | `--restrict-names` | 「保存位置」→ 仅 ASCII 文件名 | 把中文等字符替换掉，避免跨平台乱码 |

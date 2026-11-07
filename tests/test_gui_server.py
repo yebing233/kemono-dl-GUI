@@ -25,13 +25,34 @@ class DownloadPathTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"KEMONO_DL_GUI_DOWNLOAD_DIR": "D:/media/kemono"}, clear=False):
             self.assertEqual(server.default_download_path(), str(Path("D:/media/kemono")))
 
-    def test_falls_back_to_home_downloads(self) -> None:
+    def test_portable_exe_uses_a_download_folder_beside_itself(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("KEMONO_DL_GUI_DOWNLOAD_DIR", None)
-            self.assertEqual(
-                server.default_download_path(),
-                str(Path.home() / "Downloads" / "kemono-dl"),
-            )
+            with mock.patch.object(server, "FROZEN", True), \
+                    mock.patch.object(server, "portable_dir", return_value=Path("E:/kemono-dl")), \
+                    mock.patch.object(server, "writable_dir", return_value=True):
+                self.assertEqual(
+                    server.default_download_path(),
+                    str(Path("E:/kemono-dl") / "Download"),
+                )
+
+    def test_source_checkout_uses_a_download_folder_in_the_repo(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KEMONO_DL_GUI_DOWNLOAD_DIR", None)
+            with mock.patch.object(server, "writable_dir", return_value=True):
+                self.assertEqual(
+                    server.default_download_path(),
+                    str(server.REPO_ROOT / "Download"),
+                )
+
+    def test_read_only_program_dir_falls_back_to_home_downloads(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KEMONO_DL_GUI_DOWNLOAD_DIR", None)
+            with mock.patch.object(server, "writable_dir", return_value=False):
+                self.assertEqual(
+                    server.default_download_path(),
+                    str(Path.home() / "Downloads" / "kemono-dl"),
+                )
 
 
 class DataDirTests(unittest.TestCase):
@@ -39,11 +60,29 @@ class DataDirTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"KEMONO_DL_GUI_DATA": "/data"}, clear=False):
             self.assertEqual(server.app_data_dir(), Path("/data"))
 
+    def test_portable_exe_keeps_data_beside_itself(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KEMONO_DL_GUI_DATA", None)
+            with mock.patch.object(server, "FROZEN", True), \
+                    mock.patch.object(server, "portable_dir", return_value=Path("E:/kemono-dl")), \
+                    mock.patch.object(server, "writable_dir", return_value=True):
+                self.assertEqual(server.app_data_dir(), Path("E:/kemono-dl"))
+
+    def test_read_only_program_dir_falls_back_to_the_user_profile(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KEMONO_DL_GUI_DATA", None)
+            with mock.patch.object(server, "FROZEN", True), \
+                    mock.patch.object(server, "portable_dir", return_value=Path("E:/kemono-dl")), \
+                    mock.patch.object(server, "writable_dir", return_value=False):
+                data_dir = server.app_data_dir()
+                self.assertNotEqual(data_dir, Path("E:/kemono-dl"))
+
     def test_default_is_under_appdata(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=False):
             for name in ("KEMONO_DL_GUI_DATA", "LOCALAPPDATA", "APPDATA"):
                 os.environ.pop(name, None)
-            self.assertEqual(server.app_data_dir(), Path.home() / ".kemono-dl-gui")
+            with mock.patch.object(server, "FROZEN", False):
+                self.assertEqual(server.app_data_dir(), Path.home() / ".kemono-dl-gui")
 
 
 class BasicAuthTests(unittest.TestCase):
