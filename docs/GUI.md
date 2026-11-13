@@ -432,6 +432,13 @@ python tools/check_hosts.py
 python tools/check_hosts.py https://pawchive.pw/fanbox/user/71376915/post/12779605
 ```
 
+**便携版没有 Python 也能诊断**：用命令行调用 exe 自己即可（结果打印在同一个窗口里）：
+
+```bat
+kemono-dl-gui.exe --check-hosts
+kemono-dl-gui.exe --check-hosts https://pawchive.pw/fanbox/user/71376915/post/12779605
+```
+
 它会打印每个站点的 DNS、HTTP 状态和耗时，并对指定帖子的附件逐个探测：
 
 * 附件返回 **200/206** → 网络正常，能下；

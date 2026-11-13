@@ -116,6 +116,10 @@ def main() -> int:
     _ensure_std_streams(unbuffered=cli_mode)
     if cli_mode:
         return run_cli(argv[1:])
+    if argv and argv[0] == "--check-hosts":
+        from .hosts import check
+
+        return check(argv[1:])
 
     parser = argparse.ArgumentParser(prog="kemono-dl-gui", description="kemono-dl GUI · 本地图形界面")
     parser.add_argument(
