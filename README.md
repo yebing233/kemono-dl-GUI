@@ -89,6 +89,12 @@ when the program folder is read-only; override with `KEMONO_DL_GUI_HISTORY_DIR`)
 and the 下载记录 panel groups it
   by site/service/author with an "latest post" column and CSV export — run the
   same author page later and compare to see what they added.
+* **Mirror-aware pawchive downloads** — the API names one of five file hosts per
+  attachment (`n1`–`n4`, or the shared `file.pawchive.pw`); a node blocked on
+  your network is skipped and the next mirror is tried, and an attachment only
+  counts as failed once all five have been tried. `python tools/check_hosts.py`
+  reports whether a failure is "the file was deleted" (404 everywhere) or "this
+  machine cannot reach that host" (403 / reset / DNS).
 
 The CLI stays the single source of truth: each download is a real `kemono-dl`
 subprocess, the log pane shows its untouched output, and the bottom bar shows the

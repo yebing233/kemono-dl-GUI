@@ -411,6 +411,34 @@ pawchive 的文件服务器（前面挂了 DDoS-Guard）在它的拦截页里写
 pawchive 上确实存在「帖子记录还在、文件已经被删」的情况，重试解决不了，但保留重试
 才不会误伤网络抖动。
 
+### 一直报「下载失败」怎么排查
+
+pawchive 的文件由 5 台服务器提供：`file.pawchive.pw` 与 `n1`–`n4.pawchive.pw`。
+API 会给每个附件指定其中一台，但**某台被你的网络挡住、其它几台是通的**很常见，
+所以下载器现在会按「API 指定节点 → `file.pawchive.pw` → `n1`…`n4`」的顺序自动换镜像，
+日志里会看到：
+
+```
+[warning] https://n1.pawchive.pw/data/… failed (403 Client Error: Forbidden …); trying the next mirror
+```
+
+全部镜像都失败才会记一次失败，错误信息会写成
+`every mirror failed (5 tried), last error: …`。
+
+想确认到底是「文件没了」还是「网络不通」，运行诊断脚本：
+
+```bash
+python tools/check_hosts.py
+python tools/check_hosts.py https://pawchive.pw/fanbox/user/71376915/post/12779605
+```
+
+它会打印每个站点的 DNS、HTTP 状态和耗时，并对指定帖子的附件逐个探测：
+
+* 附件返回 **200/206** → 网络正常，能下；
+* 全部 **404** → 文件在该服务器上已被删除（帖子记录是旧的），换网络也没用；
+* **403 / 超时 / Connection reset / DNS 失败** → 本机到这台服务器不通，换网络、
+  关掉代理/加速器，或让代理走对线路后再试。
+
 ---
 
 ## 构建便携版 exe
@@ -492,12 +520,14 @@ git push -u origin main
 | `python tools/verify_exe.py` | 启动已打包的 `dist/kemono-dl-gui.exe`，检查冻结模式、内置依赖、静态资源与退出流程（CI 用）；设 `KEMONO_DL_GUI_EXE` 可指向别处的 exe 副本 |
 | `python tools/check_exe_bundle.py` | 不启动 exe，直接解析 PyInstaller 归档：内置解释器、MSVC 运行库、SSL、CA 证书、前端资源、`--run-cli` 自调用路径是否都在包里 |
 | `python tools/check_ui.py` | 检查 `app.js` 里用到的每个元素 id 是否都在 `index.html` 中存在 |
+| `python tools/check_hosts.py [帖子URL…]` | 逐个探测 `file.pawchive.pw`、`n1`–`n4.pawchive.pw` 与三个站点：打印 DNS、HTTP 状态、耗时，并判断「文件被删」还是「本机网络不通」 |
 | `python -m unittest tests.test_gui_args` | 24 个单元测试，逐项核对界面控件与 CLI 参数的映射（含 `--request-interval`） |
 | `python -m unittest tests.test_gui_streams` | 5 个单元测试，保证日志管道强制 UTF-8 且不做块缓冲（日文标题不崩、进度不延迟） |
 | `python -m unittest tests.test_gui_server` | 25 个单元测试，覆盖 Docker 相关逻辑（密码校验、下载目录/数据目录环境变量）、进度行解析、失败清单与下载记录（分组 / 去重 / CSV / 清空） |
 | `python -m unittest tests.test_downloader_progress` | 2 个单元测试，确认 stdout 是管道时仍逐块输出 `\r` 进度（进度条不再停在 0%） |
 | `python -m unittest tests.test_downloader_throttle` | 9 个单元测试，核对请求限速：默认 1 秒、0 关闭、NaN/负数兜底，以及全新下载不额外发探测请求 |
 | `python -m unittest tests.test_downloader_resume` | 13 个单元测试，覆盖断点续传（`Range` 续传、服务端忽略 Range、416、截断保留 `.tmp`）与「跳过已下载」的各种判定 |
+| `python -m unittest tests.test_file_mirrors` | 4 个单元测试，核对 pawchive 镜像顺序（API 节点优先）、去重、缺失 server 时回落 `file.pawchive.pw`、文件名 URL 转义 |
 | `python -m unittest tests.test_gui_modes` | 13 个静态断言，保证简单模式默认收起高级选项、专业模式开关与「作者文件夹 / 日期 / 标题 / 编号」接线完整 |
 | `python -m unittest tests.test_gui_naming` | 11 个静态断言，保证「专业模式保存方案 → 简单模式套用」的控件、localStorage 键、双向同步与删除接线完整 |
 | `python tools/docker_test.py` | 以 `0.0.0.0` + 密码模式启动，验证 `/healthz`、401/200、令牌与退出 |

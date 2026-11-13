@@ -7,6 +7,7 @@ import re
 import time
 from http.cookiejar import LoadError
 from typing import List, Literal
+from urllib.parse import quote
 
 from requests.exceptions import RequestException
 
@@ -18,6 +19,31 @@ from .utils import compute_sha256, generate_file_path, get_sha256_hash  # , get_
 OverwriteMode = Literal[False, "soft", True]
 # "soft" will not overwrite the file if it has the expected sha256 hash
 # NOTE: if two attachments have the same name (and in the same directory) but different sha256 hashes it will overwirte the first file with the second
+
+#: Hosts that can serve pawchive attachments.  The API hands out a per-file
+#: node in ``attachment.server`` (``n1`` … ``n4``), but a node can be blocked
+#: on some networks while another one works, so every mirror is tried in turn
+#: before an attachment is given up on.
+PAWCHIVE_MIRRORS = (
+    "https://file.pawchive.pw",
+    "https://n1.pawchive.pw",
+    "https://n2.pawchive.pw",
+    "https://n3.pawchive.pw",
+    "https://n4.pawchive.pw",
+)
+
+
+def pawchive_file_urls(attachment: Attachment) -> List[str]:
+    """Return mirror URLs for a pawchive attachment, the preferred host first."""
+    preferred = (attachment.server or "").rstrip("/")
+    hosts: List[str] = []
+    if preferred.startswith("http") and "pawchive" in preferred:
+        hosts.append(preferred)
+    for mirror in PAWCHIVE_MIRRORS:
+        if mirror not in hosts:
+            hosts.append(mirror)
+    filename = quote(attachment.name, safe="")
+    return [f"{host}/data{attachment.path}?f={filename}" for host in hosts]
 
 
 class KemonoDL:
@@ -375,33 +401,43 @@ class KemonoDL:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
             if domain == KemonoDL.PAWCHIVE_DOMAIN:
-                url = f"https://file.pawchive.pw/data{attachment.path}?f={attachment.name}"
+                urls = pawchive_file_urls(attachment)
             else:
-                url = f"{attachment.server}/data{attachment.path}"
+                urls = [f"{attachment.server}/data{attachment.path}"]
 
             failures = 0
+            last_error: Exception | None = None
             while failures < self.max_retries:
-                try:
-                    status = download_file(
-                        self.session,
-                        url,
-                        file_path,
-                        temp_file=not self.no_tmp,
-                        overwrite=self.force_overwrite is True,
-                    )
-                    if status == "skipped":
-                        print(f"[info] Skipped an already downloaded file at {file_path}")
+                last_error = None
+                for url in urls:
+                    try:
+                        status = download_file(
+                            self.session,
+                            url,
+                            file_path,
+                            temp_file=not self.no_tmp,
+                            overwrite=self.force_overwrite is True,
+                        )
+                        if status == "skipped":
+                            print(f"[info] Skipped an already downloaded file at {file_path}")
+                        last_error = None
+                        break
+                    except Exception as e:
+                        last_error = e
+                        if len(urls) > 1:
+                            print(f"[warning] {url} failed ({e}); trying the next mirror")
+                if last_error is None:
                     break
-                except Exception as e:
-                    failures += 1
-                    print(
-                        f"[Error] Failed to download attachment from {url!r} "
-                        f"({failures}/{self.max_retries}): {e}"
-                    )
-                    if failures < self.max_retries:
-                        delay = min(2**failures, 30)
-                        print(f"[info] Reconnecting in {delay}s and resuming from the partial file")
-                        time.sleep(delay)
+                failures += 1
+                detail = f"every mirror failed ({len(urls)} tried), last error: {last_error}" if len(urls) > 1 else str(last_error)
+                print(
+                    f"[Error] Failed to download attachment from {urls[0]!r} "
+                    f"({failures}/{self.max_retries}): {detail}"
+                )
+                if failures < self.max_retries:
+                    delay = min(2**failures, 30)
+                    print(f"[info] Reconnecting in {delay}s and resuming from the partial file")
+                    time.sleep(delay)
             else:
                 print(f"[Error] All {self.max_retries} download retries failed")
                 attachment_errors += 1
