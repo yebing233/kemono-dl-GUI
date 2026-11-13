@@ -1,3 +1,5 @@
+import contextlib
+import io
 import unittest
 from pathlib import Path
 import sys
@@ -70,7 +72,8 @@ class HostCheckTests(unittest.TestCase):
         hosts.probe = lambda url, timeout=15.0: {"url": url, "host": "x", "dns": "", "ok": True, "status": 404, "seconds": 0.0}
         hosts.post_targets = lambda post_url, limit=20: ["https://n1.pawchive.pw/data/a.mp4"]
         try:
-            code = hosts.check(["https://pawchive.pw/fanbox/user/1/post/2"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = hosts.check(["https://pawchive.pw/fanbox/user/1/post/2"])
         finally:
             hosts.probe = original_probe
             hosts.post_targets = original_targets

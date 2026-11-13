@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import socket
 import ssl
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -95,8 +96,20 @@ def post_targets(post_url: str, limit: int = 20) -> list[str]:
     return urls
 
 
+def _tolerate_console() -> None:
+    """Never die on a console whose code page cannot show the Chinese labels."""
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is None:
+        return
+    try:
+        reconfigure(errors="replace")
+    except (ValueError, OSError):
+        pass
+
+
 def check(post_urls: list[str] | None = None) -> int:
     """Probe every host (and the attachments of ``post_urls``); return an exit code."""
+    _tolerate_console()
     targets: list[tuple[str, str]] = [("站点", url) for url in SITE_HOSTS]
     targets += [("文件服务器", url) for url in PAWCHIVE_MIRRORS]
     for post_url in post_urls or []:
